@@ -46,10 +46,15 @@ pub struct AppState {
     pub telemetry_processed_total: Arc<AtomicU64>,
     /// Optional pre-shared key required for all requests when configured.
     pub engine_key: Option<String>,
+    /// Whether an engine key is strictly required by policy (CLIO_ENGINE_REQUIRE_KEY=true).
+    pub require_key: bool,
 }
 
 impl Default for AppState {
     fn default() -> Self {
+        let require_key = std::env::var("CLIO_ENGINE_REQUIRE_KEY")
+            .map(|v| v.eq_ignore_ascii_case("true") || v == "1")
+            .unwrap_or(false);
         let engine_key = std::env::var("CLIO_ENGINE_KEY")
             .ok()
             .map(|k| k.trim().to_string())
@@ -64,6 +69,7 @@ impl Default for AppState {
             semantic_analyzed_total: Arc::new(AtomicU64::new(0)),
             telemetry_processed_total: Arc::new(AtomicU64::new(0)),
             engine_key,
+            require_key,
         }
     }
 }
@@ -147,6 +153,16 @@ use axum::middleware::{Next, from_fn_with_state};
 
 /// Middleware to validate pre-shared key header (`X-Clio-Engine-Key`) when `CLIO_ENGINE_KEY` is configured.
 async fn validate_engine_key(State(state): State<AppState>, req: Request, next: Next) -> Response {
+    if state.require_key && state.engine_key.is_none() {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "error": "Engine pre-shared key required by policy but CLIO_ENGINE_KEY is not configured"
+            })),
+        )
+            .into_response();
+    }
+
     if let Some(expected) = &state.engine_key {
         let provided = req
             .headers()

@@ -95,7 +95,13 @@ export async function POST(req: NextRequest) {
 
         // ── Teacher Registration Invite Code Gate ──
         const expectedInviteCode = (process.env.TEACHER_INVITE_CODE || "").trim()
-        if (role === "teacher" && expectedInviteCode.length > 0) {
+        if (role === "teacher") {
+            if (!expectedInviteCode) {
+                return NextResponse.json(
+                    { error: "Teacher registration is disabled: faculty invite code not configured" },
+                    { status: 403 }
+                )
+            }
             const providedCode = typeof invite_code === "string" ? invite_code.trim() : ""
             const expectedBuf = Buffer.from(expectedInviteCode, "utf8")
             const providedBuf = Buffer.from(providedCode, "utf8")

@@ -10,11 +10,12 @@ services:
     environment:
       - NODE_ENV=development
       - CLIO_ENGINE_URL=http://engine:8088
-      - CLIO_ENGINE_KEY=${CLIO_ENGINE_KEY:-}
+      - CLIO_ENGINE_KEY=${CLIO_ENGINE_KEY:-clio-engine-dev-secret-key-2026}
       # Note: Contributors must provide their own .env.local 
       # or you can load them automatically if .env is present
     env_file:
-      - ./frontend/.env.local
+      - path: ./frontend/.env.local
+        required: false
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -25,9 +26,9 @@ services:
       context: ./engine-rust
       dockerfile: Dockerfile
     ports:
-      - "8088:8088"
+      - "127.0.0.1:8088:8088"
     environment:
       - PORT=8088
       - CLIO_ENGINE_HOST=0.0.0.0
-      - CLIO_ENGINE_KEY=${CLIO_ENGINE_KEY:-}
+      - CLIO_ENGINE_KEY=${CLIO_ENGINE_KEY:-clio-engine-dev-secret-key-2026}
 

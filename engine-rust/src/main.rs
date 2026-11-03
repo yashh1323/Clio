@@ -25,6 +25,10 @@ async fn main() -> anyhow::Result<()> {
         .unwrap_or(8088);
 
     let state = AppState::default();
+    let is_loopback = host == "127.0.0.1" || host == "localhost" || host == "::1";
+    if !is_loopback && state.engine_key.is_none() {
+        warn!("⚠️ SECURITY ALERT: Clio Engine is listening on non-loopback host ({host}) without CLIO_ENGINE_KEY configured! Endpoints are unauthenticated.");
+    }
     let app = build_router(state);
 
     let ip: std::net::IpAddr = host
