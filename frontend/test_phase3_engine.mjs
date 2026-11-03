@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import {
     auditTelemetryWithEngine,
     analyzeSimilarityWithEngine,
+    auditStylometryWithEngine,
     checkEngineHealth,
     renderPdfWithEngine,
 } from './lib/engine.ts';
@@ -32,7 +33,16 @@ const unconfigAudit = await auditTelemetryWithEngine(steadyTyping, 'a'.repeat(10
 assert.strictEqual(unconfigAudit.isValid, true, 'Unconfigured audit must be valid');
 assert.strictEqual(unconfigAudit.flaggedForReview, false, 'Steady typing must not be flagged');
 assert.ok(unconfigAudit.integrityScore >= 90, 'Steady typing must maintain high integrity');
-console.log('  ✔ Telemetry audit gracefully falls back to TypeScript when CLIO_ENGINE_URL is unset');
+assert.ok(unconfigAudit.peakAccretionVelocity !== undefined, 'Accretion velocity must be computed in fallback');
+assert.strictEqual(unconfigAudit.peakAccretionVelocity, 5, '5 chars/sec expected');
+console.log('  ✔ Telemetry audit gracefully falls back to TypeScript with accretion dynamics when CLIO_ENGINE_URL is unset');
+
+const unconfigStylometry = await auditStylometryWithEngine(
+    'The quick brown fox jumps over the lazy dog and explores the wider countryside during a clear summer morning.'
+);
+assert.strictEqual(unconfigStylometry.method, 'local_typescript', 'Stylometry must indicate local fallback');
+assert.ok(unconfigStylometry.wordCount > 10, 'Word count must be evaluated');
+console.log('  ✔ Stylometry audit gracefully falls back to TypeScript when CLIO_ENGINE_URL is unset');
 
 const sampleSubmissions = [
     {
@@ -134,7 +144,9 @@ try {
     assert.strictEqual(liveAudit.flaggedForReview, false, 'Steady typing must not be flagged');
     assert.ok(liveAudit.integrityScore >= 90, 'Steady typing must maintain high integrity');
     assert.strictEqual(liveAudit.verifiedPasteCount, 0, 'No paste events expected in steady typing');
-    console.log('  ✔ Keystroke telemetry auditing executed and verified by high-performance engine');
+    assert.strictEqual(liveAudit.peakAccretionVelocity, 5, 'Live audit must report 5 chars/s peak accretion velocity');
+    assert.ok(liveAudit.revisionRatio !== undefined, 'Live audit must compute revision ratio');
+    console.log('  ✔ Keystroke telemetry auditing & accretion dynamics executed and verified by high-performance engine');
 
     // Paste event detection via Engine
     const pasteSnapshots = [
@@ -225,6 +237,18 @@ try {
     const pdfHeader = Buffer.from(pdfBytes.slice(0, 8)).toString('ascii');
     assert.strictEqual(pdfHeader, '%PDF-1.4', 'PDF header must start with %PDF-1.4');
     console.log('  ✔ Native in-process PDF rendering verified by high-performance Rust engine');
+
+    // Live Engine Intrinsic Stylometry Audit
+    const p1 = 'The student wrote an extensive essay about the history of science and it was evident that his core arguments were well grounded in empirical observations from the seventeenth century which he carefully analyzed in the university archives with keen attention to original manuscripts and scholarly records discovered during his research. ';
+    const p2 = 'In subsequent chapters he examined how experimental philosophy gradually replaced scholastic traditions across western europe fostering new methodologies that prioritized reproducible measurements over dogmatic assertions thereby laying the intellectual foundations for modern scientific inquiry and transforming human understanding of natural phenomena through rigorous mathematical formulations and systematic verification. ';
+    const p3 = 'Furthermore the investigation highlighted the crucial role of scientific societies in disseminating experimental findings fostering international correspondence and establishing peer critique as an indispensable safeguard against idiosyncratic bias. ';
+    const sampleEssay = `${p1} ${p2} ${p3} ${p1} ${p2} ${p3}`; // ~265 words with natural vocabulary
+    const liveStylometry = await auditStylometryWithEngine(sampleEssay, 'Science History');
+    assert.strictEqual(liveStylometry.method, 'engine_rust', 'Must be executed by Rust engine');
+    assert.ok(liveStylometry.wordCount >= 250, 'Word count must be evaluated');
+    assert.ok(liveStylometry.totalWindows >= 1, 'Total windows must be >= 1 for > 250 words');
+    assert.strictEqual(liveStylometry.profile.isAnomalous, false, 'Homogeneous sample must not be flagged anomalous');
+    console.log('  ✔ Live Rust engine intrinsic stylometry audit verified (Udny Yule K & Burrows Delta across sliding windows)');
 
 } finally {
     engineProcess.kill();

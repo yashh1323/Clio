@@ -36,7 +36,10 @@ pub fn generate_sequential_shingles(words: &[&str], k: usize) -> Vec<u64> {
     if words.len() < k {
         return Vec::new();
     }
-    words.windows(k).map(crate::similarity::hash_shingle).collect()
+    words
+        .windows(k)
+        .map(crate::similarity::hash_shingle)
+        .collect()
 }
 
 /// Computes Winnowed fingerprints using a sliding window with deterministic rightmost tie-breaking.
@@ -74,9 +77,9 @@ pub fn winnow_shingle_hashes(shingle_hashes: &[u64]) -> Vec<Fingerprint> {
         // Find minimum hash with rightmost tie-breaker (using <=)
         let mut local_min_idx = 0;
         let mut local_min_val = window[0];
-        for j in 1..WINDOW_SIZE_W {
-            if window[j] <= local_min_val {
-                local_min_val = window[j];
+        for (j, &val) in window.iter().enumerate().skip(1) {
+            if val <= local_min_val {
+                local_min_val = val;
                 local_min_idx = j;
             }
         }
@@ -200,7 +203,9 @@ mod tests {
 
     #[test]
     fn test_sequential_shingle_matches_similarity_hash() {
-        let words = vec!["the", "quick", "brown", "fox", "jumps", "over", "the", "lazy", "dog"];
+        let words = vec![
+            "the", "quick", "brown", "fox", "jumps", "over", "the", "lazy", "dog",
+        ];
         let seq = generate_sequential_shingles(&words, 5);
         assert_eq!(seq.len(), 5);
         assert_eq!(seq[0], crate::similarity::hash_shingle(&words[0..5]));
@@ -234,20 +239,38 @@ mod tests {
         let set_b: HashSet<u64> = fps_b.iter().map(|f| f.hash).collect();
 
         let shared: Vec<_> = set_a.intersection(&set_b).collect();
-        assert!(!shared.is_empty(), "At least one fingerprint must match for >= 12 shared words");
+        assert!(
+            !shared.is_empty(),
+            "At least one fingerprint must match for >= 12 shared words"
+        );
     }
 
     #[test]
     fn test_inverted_index_deduplication_and_no_self_pairs() {
         let mut idx = InvertedFingerprintIndex::new();
         let fps_1 = vec![
-            Fingerprint { hash: 42, position: 0 },
-            Fingerprint { hash: 42, position: 5 }, // Repetitive text with identical hash
-            Fingerprint { hash: 99, position: 10 },
+            Fingerprint {
+                hash: 42,
+                position: 0,
+            },
+            Fingerprint {
+                hash: 42,
+                position: 5,
+            }, // Repetitive text with identical hash
+            Fingerprint {
+                hash: 99,
+                position: 10,
+            },
         ];
         let fps_2 = vec![
-            Fingerprint { hash: 42, position: 2 },
-            Fingerprint { hash: 99, position: 8 },
+            Fingerprint {
+                hash: 42,
+                position: 2,
+            },
+            Fingerprint {
+                hash: 99,
+                position: 8,
+            },
         ];
 
         idx.insert(0, &fps_1);
@@ -263,11 +286,26 @@ mod tests {
     #[test]
     fn test_windowed_containment_and_guards() {
         let fps = vec![
-            Fingerprint { hash: 10, position: 0 },
-            Fingerprint { hash: 20, position: 1 },
-            Fingerprint { hash: 30, position: 2 },
-            Fingerprint { hash: 40, position: 3 },
-            Fingerprint { hash: 50, position: 4 },
+            Fingerprint {
+                hash: 10,
+                position: 0,
+            },
+            Fingerprint {
+                hash: 20,
+                position: 1,
+            },
+            Fingerprint {
+                hash: 30,
+                position: 2,
+            },
+            Fingerprint {
+                hash: 40,
+                position: 3,
+            },
+            Fingerprint {
+                hash: 50,
+                position: 4,
+            },
         ];
         let mut set = HashSet::new();
         set.insert(20);

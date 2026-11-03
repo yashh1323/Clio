@@ -33,6 +33,7 @@ async fn main() -> anyhow::Result<()> {
     info!("   ├─ POST /api/v1/telemetry/audit");
     info!("   ├─ POST /api/v1/similarity/analyze");
     info!("   ├─ POST /api/v1/pdf/render");
+    info!("   ├─ POST /api/v1/stylometry/audit");
     info!("   ├─ GET  /health");
     info!("   └─ GET  /metrics");
 

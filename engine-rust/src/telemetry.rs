@@ -108,7 +108,7 @@ pub struct AuditRequest {
 }
 
 /// AuditResult delivers authoritative server-computed proof-of-write metrics.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AuditResult {
     /// Whether the telemetry stream is structurally valid.
     #[serde(rename = "isValid")]
@@ -140,6 +140,27 @@ pub struct AuditResult {
     /// List of detected anomalous paste events.
     #[serde(rename = "pasteEvents")]
     pub paste_events: Vec<PasteEvent>,
+    /// Net revision ratio: total characters deleted / total characters inserted (typically 0.0 - 1.0; can exceed 1.0 during heavy redaction).
+    #[serde(
+        rename = "revisionRatio",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub revision_ratio: Option<f64>,
+    /// Peak accretion velocity in characters per second observed during typing.
+    #[serde(
+        rename = "peakAccretionVelocity",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub peak_accretion_velocity: Option<f64>,
+    /// Average accretion velocity in characters per second during active typing.
+    #[serde(
+        rename = "avgAccretionVelocity",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub avg_accretion_velocity: Option<f64>,
 }
 
 /// Monotonicity violation details.
@@ -308,6 +329,9 @@ pub fn audit_telemetry(
             active_typing_time_ms: 0,
             total_snapshots: 0,
             paste_events: Vec::new(),
+            revision_ratio: None,
+            peak_accretion_velocity: None,
+            avg_accretion_velocity: None,
         };
     }
 
@@ -327,6 +351,9 @@ pub fn audit_telemetry(
                 active_typing_time_ms: 0,
                 total_snapshots: snapshots.len(),
                 paste_events: Vec::new(),
+                revision_ratio: None,
+                peak_accretion_velocity: None,
+                avg_accretion_velocity: None,
             };
         }
     }
@@ -347,6 +374,9 @@ pub fn audit_telemetry(
             active_typing_time_ms: 0,
             total_snapshots: snapshots.len(),
             paste_events: Vec::new(),
+            revision_ratio: None,
+            peak_accretion_velocity: None,
+            avg_accretion_velocity: None,
         };
     }
 
@@ -391,15 +421,23 @@ pub fn audit_telemetry(
             active_typing_time_ms: 0,
             total_snapshots: 1,
             paste_events: events,
+            revision_ratio: None,
+            peak_accretion_velocity: None,
+            avg_accretion_velocity: None,
         };
     }
 
-    // 5. Progression Audit & Paste Detection
+    // 5. Progression Audit, Paste Detection, & Accretion Dynamics
     let mut paste_events = detect_paste_events_with_lengths(snapshots, &snap_lengths);
     let paste_indices: HashSet<usize> = paste_events.iter().map(|p| p.index).collect();
 
     let mut typed_char_count = 0;
     let mut active_typing_time_ms: i64 = 0;
+    let mut total_insertions: usize = 0;
+    let mut total_deletions: usize = 0;
+    let mut peak_velocity: f64 = 0.0;
+    let mut active_vel_chars: usize = 0;
+    let mut active_vel_ms: i64 = 0;
 
     for i in 1..snapshots.len() {
         let prev = &snapshots[i - 1];
@@ -408,6 +446,12 @@ pub fn audit_telemetry(
         let prev_len = snap_lengths[i - 1] as i32;
         let curr_len = snap_lengths[i] as i32;
         let delta_chars = curr_len - prev_len;
+
+        if delta_chars > 0 {
+            total_insertions += delta_chars as usize;
+        } else if delta_chars < 0 {
+            total_deletions += delta_chars.unsigned_abs() as usize;
+        }
 
         if paste_indices.contains(&i) {
             // Paste event — do not credit characters toward typing speed
@@ -425,11 +469,44 @@ pub fn audit_telemetry(
             } else {
                 active_typing_time_ms += 5000;
             }
+
+            // Accretion velocity only tracks typing progression (pastes excluded)
+            if delta_ms > 100 {
+                let delta_sec = (delta_ms as f64) / 1000.0;
+                let vel = (delta_chars as f64) / delta_sec;
+                if vel > peak_velocity {
+                    peak_velocity = vel;
+                }
+                // Only integrate active typing intervals (<= 5000ms) to prevent idle pauses from skewing average
+                if delta_ms <= 5000 {
+                    active_vel_chars += delta_chars as usize;
+                    active_vel_ms += delta_ms;
+                }
+            }
         } else if delta_ms <= 5000 {
             // Backspacing / editing / idle within 5s
             active_typing_time_ms += delta_ms;
         }
     }
+
+    let revision_ratio = if total_insertions > 0 {
+        Some(((total_deletions as f64) / (total_insertions as f64) * 1000.0).round() / 1000.0)
+    } else {
+        None
+    };
+
+    let peak_accretion_velocity = if peak_velocity > 0.0 {
+        Some((peak_velocity * 10.0).round() / 10.0)
+    } else {
+        None
+    };
+
+    let avg_accretion_velocity = if active_vel_ms > 0 && active_vel_chars > 0 {
+        let avg_vel = (active_vel_chars as f64) / ((active_vel_ms as f64) / 1000.0);
+        Some((avg_vel * 10.0).round() / 10.0)
+    } else {
+        None
+    };
 
     // 6. Check for unrecorded trailing paste
     let last_snap_len = snap_lengths[snapshots.len() - 1];
@@ -499,12 +576,25 @@ pub fn audit_telemetry(
         }
     }
 
+    let anomalous_accretion = peak_velocity > 80.0;
+    let zero_revision_injection =
+        typed_char_count > 500 && revision_ratio.is_some_and(|r| r < 0.02);
+
+    if zero_revision_injection {
+        score -= 15;
+    }
+    if anomalous_accretion {
+        score -= 20;
+    }
+
     let final_integrity_score = score.clamp(0, 100);
 
     let flagged_for_review = final_integrity_score < 50
         || verified_paste_count >= 3
         || verified_wpm > 150
         || total_pasted_chars >= 200
+        || anomalous_accretion
+        || zero_revision_injection
         || (total_essay_length > 100
             && (typed_char_count as f64) < (total_essay_length as f64) * 0.3);
 
@@ -519,6 +609,9 @@ pub fn audit_telemetry(
         active_typing_time_ms,
         total_snapshots: snapshots.len(),
         paste_events,
+        revision_ratio,
+        peak_accretion_velocity,
+        avg_accretion_velocity,
     }
 }
 
@@ -762,5 +855,83 @@ mod tests {
         assert!(res.flagged_for_review);
         assert_eq!(res.verified_paste_count, 1);
         assert_eq!(res.integrity_score, 30);
+    }
+
+    #[test]
+    fn test_audit_accretion_velocity_and_revision_ratio() {
+        // Natural drafting: 10 typing intervals with slight backspacing
+        let mut snaps = Vec::new();
+        let mut text_len = 0;
+        let mut ts = 1000;
+        snaps.push(TelemetrySnapshot {
+            timestamp: ts,
+            html: None,
+            text_length: Some(0.0),
+        });
+
+        for i in 1..=10 {
+            ts += 1000; // 1 second intervals
+            if i == 5 {
+                // Backspacing: delete 5 chars
+                text_len -= 5;
+            } else {
+                // Type 10 chars (10 chars / sec)
+                text_len += 10;
+            }
+            snaps.push(TelemetrySnapshot {
+                timestamp: ts,
+                html: None,
+                text_length: Some(text_len as f64),
+            });
+        }
+
+        let essay = "a".repeat(text_len as usize);
+        let res = audit_telemetry(&snaps, Some(&essay));
+        assert!(res.is_valid);
+        assert!(res.revision_ratio.is_some());
+        let rev = res.revision_ratio.unwrap();
+        // 5 chars deleted / 90 chars inserted = 0.056
+        assert!((0.04..0.07).contains(&rev));
+
+        assert!(res.peak_accretion_velocity.is_some());
+        let peak_v = res.peak_accretion_velocity.unwrap();
+        assert!((9.0..=11.0).contains(&peak_v));
+
+        assert!(res.avg_accretion_velocity.is_some());
+        let avg_v = res.avg_accretion_velocity.unwrap();
+        assert!((9.0..=11.0).contains(&avg_v));
+    }
+
+    #[test]
+    fn test_audit_anomalous_accretion_penalty() {
+        // Human typing cannot sustain > 80 chars/sec without pasting.
+        // 45 chars in 520ms = 86.5 chars/s (below single-jump paste thresholds: <50 chars, >=500ms, >=300ms)
+        let snaps = vec![
+            TelemetrySnapshot {
+                timestamp: 1000,
+                html: None,
+                text_length: Some(0.0),
+            },
+            TelemetrySnapshot {
+                timestamp: 1520, // 520 ms
+                html: None,
+                text_length: Some(45.0),
+            },
+            TelemetrySnapshot {
+                timestamp: 2500,
+                html: None,
+                text_length: Some(50.0),
+            },
+        ];
+
+        let res = audit_telemetry(&snaps, Some(&"a".repeat(50)));
+        assert_eq!(res.verified_paste_count, 0); // Not a discrete paste event
+        assert!(res.peak_accretion_velocity.is_some());
+        let peak_v = res.peak_accretion_velocity.unwrap();
+        assert!(
+            peak_v >= 80.0,
+            "Peak velocity should be >= 80.0 (actual: {peak_v})"
+        );
+        assert!(res.flagged_for_review);
     }
 }

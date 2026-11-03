@@ -30,7 +30,7 @@ export interface SimilarityAnalysisResult {
 }
 
 /**
- * Returns the configured Go microservice URL or undefined if unconfigured.
+ * Returns the configured Rust microservice URL or undefined if unconfigured.
  */
 export function getEngineUrl(): string | undefined {
     const url = process.env.CLIO_ENGINE_URL?.trim()
@@ -47,7 +47,7 @@ export function getEngineHeaders(): Record<string, string> {
 }
 
 /**
- * Checks health and connectivity of the Go High-Performance Engine.
+ * Checks health and connectivity of the Clio Rust High-Performance Engine.
  */
 export async function checkEngineHealth(): Promise<{ ok: boolean; status?: string; data?: unknown }> {
     const engineUrl = getEngineUrl()
@@ -79,7 +79,7 @@ export async function checkEngineHealth(): Promise<{ ok: boolean; status?: strin
 
 /**
  * Strangler Fig proxy for telemetry auditing:
- * Dispatches heavy cryptographic/monotonic auditing to Go microservice if available.
+ * Dispatches heavy cryptographic/monotonic auditing to Rust microservice if available.
  * Gracefully falls back to authoritative local TypeScript engine if offline or unconfigured.
  */
 export async function auditTelemetryWithEngine(
@@ -331,4 +331,193 @@ export async function renderPdfWithEngine(
 
     return null
 }
+
+export interface EngineStylometricProfile {
+    yulesK: number
+    burrowsDeltaMax: number
+    burrowsDeltaMean: number
+    anomalousWindows: number[]
+    isAnomalous: boolean
+    riskScore: number
+}
+
+export interface StylometryAuditResult {
+    profile: EngineStylometricProfile
+    wordCount: number
+    totalWindows: number
+    method?: "engine_rust" | "local_typescript"
+}
+
+const FUNCTION_WORDS = [
+    "the", "of", "and", "to", "a", "in", "that", "is", "was", "he", "for", "it", "with", "as",
+    "his", "on", "be", "at", "by", "i", "this", "had", "not", "are", "but", "from", "or", "have",
+    "an", "they", "which", "one", "you", "were", "her", "all", "she", "there", "would", "their",
+    "we", "him", "been", "has", "when", "who", "will", "more", "no", "if",
+]
+
+export function localCalculateYulesK(words: string[]): number {
+    const totalWords = words ? words.length : 0
+    if (totalWords < 20) return 0
+
+    const counts = new Map<string, number>()
+    for (const w of words) {
+        counts.set(w, (counts.get(w) || 0) + 1)
+    }
+
+    const s1 = totalWords
+    let s2 = 0
+    for (const c of counts.values()) {
+        s2 += c * c
+    }
+
+    return (10000 * (s2 - s1)) / (s1 * s1)
+}
+
+export function localAuditStylometry(content: string): StylometryAuditResult {
+    // Match Rust engine clean_text: strip HTML, entity references, and non-letter tokens
+    const stripped = content
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+        .replace(/<[^>]*>/g, " ")
+        .replace(/&[a-z]+;|&#\d+;|&#x[0-9a-f]+;/gi, " ")
+        .toLowerCase()
+    const words = stripped
+        .replace(/[^\p{L}\p{N}\s]/gu, " ")
+        .split(/\s+/)
+        .filter(w => w.length > 0)
+    const wordCount = words.length
+    const yulesK = Math.round(localCalculateYulesK(words) * 100) / 100
+
+    const windowSize = 250
+    const stride = 50
+
+    if (wordCount < windowSize) {
+        const isAnomalous = wordCount >= 100 && (yulesK < 25 || yulesK > 180)
+        return {
+            profile: {
+                yulesK,
+                burrowsDeltaMax: 0,
+                burrowsDeltaMean: 0,
+                anomalousWindows: [],
+                isAnomalous,
+                riskScore: isAnomalous ? 60 : 10,
+            },
+            wordCount,
+            totalWindows: 0,
+            method: "local_typescript",
+        }
+    }
+
+    const mapped = words.map(w => FUNCTION_WORDS.indexOf(w))
+    const baseCounts = new Array(50).fill(0)
+    for (const idx of mapped) {
+        if (idx >= 0 && idx < 50) baseCounts[idx]++
+    }
+    const baseFreqs = baseCounts.map(c => c / wordCount)
+    let activeFeatures = 0
+    for (let i = 0; i < 50; i++) {
+        if (baseCounts[i] > 0) activeFeatures++
+    }
+    const denomFeatures = Math.max(activeFeatures, 10)
+
+    let deltaMax = 0
+    let deltaSum = 0
+    let totalWindows = 0
+    const anomalousWindows: number[] = []
+
+    for (let start = 0; start + windowSize <= wordCount; start += stride) {
+        const chunk = mapped.slice(start, start + windowSize)
+        const winCounts = new Array(50).fill(0)
+        for (const idx of chunk) {
+            if (idx >= 0 && idx < 50) winCounts[idx]++
+        }
+
+        let delta = 0
+        for (let i = 0; i < 50; i++) {
+            if (baseCounts[i] > 0 || winCounts[i] > 0) {
+                const expected = windowSize * baseFreqs[i]
+                const observed = winCounts[i]
+                const sigma = Math.max(Math.sqrt(expected), 0.5)
+                delta += Math.abs(observed - expected) / sigma
+            }
+        }
+        delta /= denomFeatures
+
+        if (delta > 1.8) {
+            anomalousWindows.push(totalWindows)
+        }
+        if (delta > deltaMax) {
+            deltaMax = delta
+        }
+        deltaSum += delta
+        totalWindows++
+    }
+
+    const burrowsDeltaMean = totalWindows > 0 ? deltaSum / totalWindows : 0
+    const isAnomalous = anomalousWindows.length > 0 || (wordCount >= 100 && (yulesK < 25 || yulesK > 180))
+
+    let riskScore = 10
+    if (anomalousWindows.length > 0) {
+        riskScore += Math.min(anomalousWindows.length * 20, 60)
+    }
+    if (deltaMax > 1.8) riskScore += 20
+    if (wordCount >= 100 && (yulesK < 25 || yulesK > 180)) riskScore += 20
+
+    return {
+        profile: {
+            yulesK,
+            burrowsDeltaMax: Math.round(deltaMax * 1000) / 1000,
+            burrowsDeltaMean: Math.round(burrowsDeltaMean * 1000) / 1000,
+            anomalousWindows,
+            isAnomalous,
+            riskScore: Math.min(riskScore, 100),
+        },
+        wordCount,
+        totalWindows,
+        method: "local_typescript",
+    }
+}
+
+/**
+ * Strangler Fig proxy for single-document intrinsic stylometry audit:
+ * Dispatches analysis to Rust Engine (/api/v1/stylometry/audit) if available.
+ * Gracefully falls back to local TypeScript implementation if offline or unconfigured.
+ */
+export async function auditStylometryWithEngine(
+    content: string,
+    title?: string
+): Promise<StylometryAuditResult> {
+    const engineUrl = getEngineUrl()
+
+    if (engineUrl) {
+        try {
+            const res = await fetch(`${engineUrl}/api/v1/stylometry/audit`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...getEngineHeaders(),
+                },
+                body: JSON.stringify({
+                    content,
+                    title,
+                }),
+                signal: AbortSignal.timeout(5000),
+            })
+
+            if (res.ok) {
+                const data = (await res.json()) as StylometryAuditResult
+                data.method = "engine_rust"
+                return data
+            }
+
+            console.warn(`[Clio Engine] Stylometry endpoint responded with HTTP ${res.status}; falling back to local TypeScript engine.`)
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err)
+            console.warn(`[Clio Engine] Rust engine unreachable (${msg}); falling back to local TypeScript engine.`)
+        }
+    }
+
+    return localAuditStylometry(content)
+}
+
 

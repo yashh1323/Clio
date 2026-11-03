@@ -71,6 +71,51 @@ async fn test_telemetry_audit_api_endpoint() {
         .unwrap();
 
     assert_eq!(res.status(), StatusCode::OK);
+    let body_bytes = axum::body::to_bytes(res.into_body(), 1024 * 1024)
+        .await
+        .unwrap();
+    let audit_res: clio_engine::AuditResult = serde_json::from_slice(&body_bytes).unwrap();
+    assert!(audit_res.is_valid);
+    assert_eq!(audit_res.peak_accretion_velocity, Some(5.0));
+    assert_eq!(audit_res.avg_accretion_velocity, Some(5.0));
+}
+
+#[tokio::test]
+async fn test_stylometry_audit_api_integration() {
+    let state = AppState::default();
+    let app = build_router(state);
+
+    let p1 = "The student wrote an extensive essay about the history of science and it was evident that his core arguments were well grounded in empirical observations from the seventeenth century which he carefully analyzed in the university archives with keen attention to original manuscripts and scholarly records discovered during his research. ";
+    let p2 = "In subsequent chapters he examined how experimental philosophy gradually replaced scholastic traditions across western europe fostering new methodologies that prioritized reproducible measurements over dogmatic assertions thereby laying the intellectual foundations for modern scientific inquiry and transforming human understanding of natural phenomena through rigorous mathematical formulations and systematic verification. ";
+    let p3 = "Furthermore the investigation highlighted the crucial role of scientific societies in disseminating experimental findings fostering international correspondence and establishing peer critique as an indispensable safeguard against idiosyncratic bias. ";
+    let essay = format!("{p1}{p2}{p3}{p1}{p2}{p3}"); // ~265 words with natural vocabulary
+    let payload = serde_json::json!({
+        "content": essay,
+        "title": "Scientific Revolution"
+    });
+
+    let res = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/stylometry/audit")
+                .header("content-type", "application/json")
+                .body(Body::from(payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), StatusCode::OK);
+    let body_bytes = axum::body::to_bytes(res.into_body(), 1024 * 1024)
+        .await
+        .unwrap();
+    let stylometry_res: clio_engine::StylometryResponse =
+        serde_json::from_slice(&body_bytes).unwrap();
+    assert!(stylometry_res.word_count >= 250);
+    assert!(stylometry_res.total_windows >= 1);
+    assert!(!stylometry_res.profile.is_anomalous);
+    assert!(stylometry_res.profile.burrows_delta_max < 1.5);
 }
 
 #[tokio::test]
@@ -187,6 +232,7 @@ async fn test_unauthenticated_probes_and_protected_compute_routes() {
         "/api/v1/telemetry/audit",
         "/api/v1/similarity/analyze",
         "/api/v1/pdf/render",
+        "/api/v1/stylometry/audit",
     ] {
         let res = app
             .clone()

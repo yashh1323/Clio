@@ -252,7 +252,8 @@ struct ProcessedSubmission {
 pub fn analyze_corpus(req: &AnalyzeRequest) -> AnalyzeResponse {
     let threshold = req.threshold.unwrap_or(25).max(1);
     let shingle_size = req.shingle_size.unwrap_or(4).max(1);
-    let effective_containment_threshold = req.containment_threshold.unwrap_or(0.20).clamp(0.01, 1.0);
+    let effective_containment_threshold =
+        req.containment_threshold.unwrap_or(0.20).clamp(0.01, 1.0);
 
     if req.submissions.len() < 2 {
         return AnalyzeResponse {
@@ -436,10 +437,8 @@ pub fn analyze_corpus(req: &AnalyzeRequest) -> AnalyzeResponse {
             };
 
             // Asymmetric Broder Containment: C(A ⊆ B) & C(B ⊆ A)
-            let (c_1_in_2, c_2_in_1) = crate::winnowing::calculate_set_containment(
-                &a.fingerprint_set,
-                &b.fingerprint_set,
-            );
+            let (c_1_in_2, c_2_in_1) =
+                crate::winnowing::calculate_set_containment(&a.fingerprint_set, &b.fingerprint_set);
             let global_containment = c_1_in_2.max(c_2_in_1);
 
             // Localized windowed block containment to catch dense passages in large essays
@@ -462,7 +461,8 @@ pub fn analyze_corpus(req: &AnalyzeRequest) -> AnalyzeResponse {
             let shared_fingerprints = a.fingerprint_set.intersection(&b.fingerprint_set).count();
 
             // Retain pair if Jaccard similarity OR asymmetric containment meets threshold
-            let is_match = similarity >= threshold || max_containment >= effective_containment_threshold;
+            let is_match =
+                similarity >= threshold || max_containment >= effective_containment_threshold;
 
             if is_match {
                 Some(SimilarityPair {
@@ -810,7 +810,7 @@ mod tests {
                     content: essay_b,
                 },
             ],
-            threshold: Some(25), // Jaccard threshold is 25%
+            threshold: Some(25),               // Jaccard threshold is 25%
             containment_threshold: Some(0.20), // Containment threshold is 20%
             shingle_size: Some(4),
         };
@@ -818,10 +818,26 @@ mod tests {
         let res = analyze_corpus(&req);
 
         // Diluted Jaccard similarity must be < 10% (would fail standard plagiarism detector)
-        assert_eq!(res.pairs.len(), 1, "Must detect the plagiarized pair despite dilution!");
+        assert_eq!(
+            res.pairs.len(),
+            1,
+            "Must detect the plagiarized pair despite dilution!"
+        );
         let pair = &res.pairs[0];
-        assert!(pair.similarity < 15, "Symmetric Jaccard must be diluted (< 15%), actual: {}", pair.similarity);
-        assert!(pair.max_containment >= 0.85, "Windowed containment must detect copied passage with >= 85%, actual: {}", pair.max_containment);
-        assert!(pair.shared_fingerprints >= 10, "Must share Winnowing fingerprints, actual: {}", pair.shared_fingerprints);
+        assert!(
+            pair.similarity < 15,
+            "Symmetric Jaccard must be diluted (< 15%), actual: {}",
+            pair.similarity
+        );
+        assert!(
+            pair.max_containment >= 0.85,
+            "Windowed containment must detect copied passage with >= 85%, actual: {}",
+            pair.max_containment
+        );
+        assert!(
+            pair.shared_fingerprints >= 10,
+            "Must share Winnowing fingerprints, actual: {}",
+            pair.shared_fingerprints
+        );
     }
 }

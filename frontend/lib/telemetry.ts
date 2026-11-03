@@ -33,6 +33,9 @@ export interface TelemetryAuditResult {
     activeTypingTimeMs: number
     totalSnapshots: number
     pasteEvents: PasteEvent[]
+    revisionRatio?: number
+    peakAccretionVelocity?: number
+    avgAccretionVelocity?: number
 }
 
 /**
@@ -280,6 +283,11 @@ export function auditTelemetrySnapshots(
 
     let typedCharCount = 0
     let activeTypingTimeMs = 0
+    let totalInsertions = 0
+    let totalDeletions = 0
+    let peakVelocity = 0
+    let activeVelChars = 0
+    let activeVelMs = 0
 
     for (let i = 1; i < typedSnapshots.length; i++) {
         const prev = typedSnapshots[i - 1]
@@ -289,6 +297,12 @@ export function auditTelemetrySnapshots(
         const currLen = snapLengths[i]
         const deltaChars = currLen - prevLen
 
+        if (deltaChars > 0) {
+            totalInsertions += deltaChars
+        } else if (deltaChars < 0) {
+            totalDeletions += Math.abs(deltaChars)
+        }
+
         if (pasteIndices.has(i)) {
             // Paste event — do not credit characters toward typing speed
             activeTypingTimeMs += Math.min(deltaMs, 300)
@@ -297,6 +311,18 @@ export function auditTelemetrySnapshots(
             typedCharCount += deltaChars
             // Cap single typing intervals at 5000ms so long idle pauses don't skew WPM downward
             activeTypingTimeMs += Math.min(deltaMs, 5000)
+
+            if (deltaMs > 100) {
+                const deltaSec = deltaMs / 1000
+                const vel = deltaChars / deltaSec
+                if (vel > peakVelocity) {
+                    peakVelocity = vel
+                }
+                if (deltaMs <= 5000) {
+                    activeVelChars += deltaChars
+                    activeVelMs += deltaMs
+                }
+            }
         } else {
             // Backspacing / editing / idle
             if (deltaMs <= 5000) {
@@ -304,6 +330,18 @@ export function auditTelemetrySnapshots(
             }
         }
     }
+
+    const revisionRatio = totalInsertions > 0
+        ? Math.round((totalDeletions / totalInsertions) * 1000) / 1000
+        : undefined
+
+    const peakAccretionVelocity = peakVelocity > 0
+        ? Math.round(peakVelocity * 10) / 10
+        : undefined
+
+    const avgAccretionVelocity = activeVelMs > 0 && activeVelChars > 0
+        ? Math.round((activeVelChars / (activeVelMs / 1000)) * 10) / 10
+        : undefined
 
     // 6. Check for unrecorded trailing paste (discrepancy between last snapshot and submitted content)
     const lastSnapLen = snapLengths[typedSnapshots.length - 1]
@@ -370,12 +408,24 @@ export function auditTelemetrySnapshots(
         }
     }
 
+    const anomalousAccretion = peakVelocity > 80.0
+    const zeroRevisionInjection = typedCharCount > 500 && revisionRatio !== undefined && revisionRatio < 0.02
+
+    if (zeroRevisionInjection) {
+        score -= 15
+    }
+    if (anomalousAccretion) {
+        score -= 20
+    }
+
     const finalIntegrityScore = Math.max(0, Math.min(100, Math.round(score)))
     const flaggedForReview =
         finalIntegrityScore < 50 ||
         verifiedPasteCount >= 3 ||
         verifiedWpm > 150 ||
         totalPastedChars >= 200 ||
+        anomalousAccretion ||
+        zeroRevisionInjection ||
         (totalEssayLength > 100 && typedCharCount < totalEssayLength * 0.3)
 
     return {
@@ -388,5 +438,8 @@ export function auditTelemetrySnapshots(
         activeTypingTimeMs,
         totalSnapshots: typedSnapshots.length,
         pasteEvents,
+        revisionRatio,
+        peakAccretionVelocity,
+        avgAccretionVelocity,
     }
 }

@@ -6,6 +6,7 @@
 //! - `POST /api/v1/telemetry/audit`
 //! - `POST /api/v1/similarity/analyze`
 //! - `POST /api/v1/pdf/render`
+//! - `POST /api/v1/stylometry/audit`
 
 use crate::pdf::{RenderPdfRequest, render_pdf};
 use crate::similarity::{AnalyzeRequest, AnalyzeResponse, analyze_corpus};
@@ -37,6 +38,8 @@ pub struct AppState {
     pub similarity_runs_total: Arc<AtomicU64>,
     /// Total count of native in-process PDF renders processed.
     pub pdf_renders_total: Arc<AtomicU64>,
+    /// Total count of stylometry audits processed.
+    pub stylometry_audits_total: Arc<AtomicU64>,
     /// Optional pre-shared key required for all requests when configured.
     pub engine_key: Option<String>,
 }
@@ -53,6 +56,7 @@ impl Default for AppState {
             telemetry_audits_total: Arc::new(AtomicU64::new(0)),
             similarity_runs_total: Arc::new(AtomicU64::new(0)),
             pdf_renders_total: Arc::new(AtomicU64::new(0)),
+            stylometry_audits_total: Arc::new(AtomicU64::new(0)),
             engine_key,
         }
     }
@@ -102,6 +106,7 @@ struct MetricsResponse {
     telemetry_audits_total: u64,
     similarity_runs_total: u64,
     pdf_renders_total: u64,
+    stylometry_audits_total: u64,
     uptime_seconds: f64,
 }
 
@@ -123,6 +128,7 @@ async fn metrics_handler(State(state): State<AppState>) -> Json<MetricsResponse>
         telemetry_audits_total: state.telemetry_audits_total.load(Ordering::Relaxed),
         similarity_runs_total: state.similarity_runs_total.load(Ordering::Relaxed),
         pdf_renders_total: state.pdf_renders_total.load(Ordering::Relaxed),
+        stylometry_audits_total: state.stylometry_audits_total.load(Ordering::Relaxed),
         uptime_seconds: uptime,
     })
 }
@@ -249,6 +255,39 @@ async fn pdf_render_handler(
         .into_response())
 }
 
+/// Handler for `POST /api/v1/stylometry/audit`.
+/// Uses tokio::task::spawn_blocking to isolate CPU-intensive stylometry analysis and caps content length to 1MB.
+async fn audit_stylometry_handler(
+    State(state): State<AppState>,
+    ValidatedJson(req): ValidatedJson<crate::stylometry::StylometryRequest>,
+) -> Result<Json<crate::stylometry::StylometryResponse>, (StatusCode, Json<serde_json::Value>)> {
+    if req.content.len() > 1_000_000 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": "Content exceeds 1MB limit" })),
+        ));
+    }
+
+    state
+        .stylometry_audits_total
+        .fetch_add(1, Ordering::Relaxed);
+    if let Some(title) = &req.title {
+        tracing::debug!("Auditing stylometry for document: {}", title);
+    }
+    let content = req.content;
+
+    let result = tokio::task::spawn_blocking(move || crate::stylometry::audit_stylometry(&content))
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": format!("Worker task failed: {e}") })),
+            )
+        })?;
+
+    Ok(Json(result))
+}
+
 /// Builds a restricted CORS layer allowing localhost:3000, 127.0.0.1:3000, or custom origins.
 fn build_cors_layer_with_origin(custom_origin: Option<&str>) -> CorsLayer {
     let mut origins = vec![
@@ -292,6 +331,10 @@ pub fn build_router(state: AppState) -> Router {
             post(similarity_analyze_handler),
         )
         .route("/api/v1/pdf/render", post(pdf_render_handler))
+        .route(
+            "/api/v1/stylometry/audit",
+            post(audit_stylometry_handler).layer(DefaultBodyLimit::max(1024 * 1024)),
+        )
         .route_layer(from_fn_with_state(state.clone(), validate_engine_key));
 
     Router::new()
@@ -574,5 +617,32 @@ mod tests {
                 .and_then(|v| v.to_str().ok()),
             Some("https://clio.university.edu")
         );
+    }
+
+    #[tokio::test]
+    async fn test_stylometry_audit_endpoint() {
+        let state = AppState::default();
+        let app = build_router(state.clone());
+
+        let essay = "The quick brown fox jumps over the lazy dog. In the beginning, the author constructed a narrative that resonated with the audience and explained the significance of the scientific revolution.";
+        let payload = serde_json::json!({
+            "content": essay,
+            "title": "Introductory Essay"
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/stylometry/audit")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_vec(&payload).unwrap()))
+                    .expect("valid request"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(state.stylometry_audits_total.load(Ordering::Relaxed), 1);
     }
 }
