@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { supabase } from "@/lib/supabase"
+import { createSupabaseAdmin } from "@/lib/supabase"
 import { verifyToken } from "@/lib/auth"
 
 // ── GET /api/student-analytics — Student's personal performance analytics ──
@@ -10,6 +10,8 @@ export async function GET(req: NextRequest) {
     if (!session || session.role !== "student") {
         return NextResponse.json({ error: "Forbidden: students only" }, { status: 403 })
     }
+
+    const supabase = createSupabaseAdmin()
 
     const { data: profile, error: profileErr } = await supabase
         .from("profiles")

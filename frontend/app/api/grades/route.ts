@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { supabase } from "@/lib/supabase"
+import { createSupabaseAdmin } from "@/lib/supabase"
 import { verifyToken } from "@/lib/auth"
 
 // ── POST /api/grades — teacher grades a submission ──
@@ -12,12 +12,20 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Forbidden — teachers only" }, { status: 403 })
     }
 
+    let body: Record<string, unknown>
     try {
-        // Parallelize: profile lookup + body parsing (independent)
-        const [{ data: teacher, error: tErr }, body] = await Promise.all([
-            supabase.from("profiles").select("id").eq("username", session.username).single(),
-            req.json(),
-        ])
+        body = await req.json()
+    } catch {
+        return NextResponse.json({ error: "Invalid JSON in request body" }, { status: 400 })
+    }
+
+    try {
+        const supabase = createSupabaseAdmin()
+        const { data: teacher, error: tErr } = await supabase
+            .from("profiles")
+            .select("id")
+            .eq("username", session.username)
+            .single()
 
         if (tErr || !teacher) {
             return NextResponse.json({ error: "Teacher profile not found" }, { status: 404 })
@@ -34,6 +42,29 @@ export async function POST(req: NextRequest) {
         }
         if (score === undefined || score < 0 || score > 100) {
             return NextResponse.json({ error: "score must be 0–100" }, { status: 400 })
+        }
+
+        // Verify teacher ownership against submissions table (IDOR protection)
+        const { data: submission, error: subErr } = await supabase
+            .from("submissions")
+            .select("id, teacher_id")
+            .eq("id", submission_id)
+            .single()
+
+        if (subErr || !submission) {
+            return NextResponse.json({ error: "Submission not found" }, { status: 404 })
+        }
+
+        if (submission.teacher_id && submission.teacher_id !== teacher.id) {
+            return NextResponse.json({ error: "Forbidden: Not your submission" }, { status: 403 })
+        }
+
+        // If submission was unassigned, bind it to this teacher now
+        if (!submission.teacher_id) {
+            await supabase
+                .from("submissions")
+                .update({ teacher_id: teacher.id })
+                .eq("id", submission_id)
         }
 
         // Upsert grade (one grade per submission)
@@ -57,8 +88,9 @@ export async function POST(req: NextRequest) {
         }
 
         return NextResponse.json({ message: "Graded successfully", grade })
-    } catch {
-        return NextResponse.json({ error: "Invalid request body" }, { status: 400 })
+    } catch (err) {
+        console.error("Grading error:", err)
+        return NextResponse.json({ error: "Internal server error" }, { status: 500 })
     }
 }
 
@@ -76,9 +108,37 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: "submission_id query param required" }, { status: 400 })
     }
 
+    const supabase = createSupabaseAdmin()
+
+    // Get teacher profile
+    const { data: teacher, error: tErr } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("username", session.username)
+        .single()
+
+    if (tErr || !teacher) {
+        return NextResponse.json({ error: "Teacher profile not found" }, { status: 404 })
+    }
+
+    // Verify teacher ownership against submissions table (IDOR protection)
+    const { data: submission, error: subErr } = await supabase
+        .from("submissions")
+        .select("id, teacher_id")
+        .eq("id", submissionId)
+        .single()
+
+    if (subErr || !submission) {
+        return NextResponse.json({ error: "Submission not found" }, { status: 404 })
+    }
+
+    if (submission.teacher_id && submission.teacher_id !== teacher.id) {
+        return NextResponse.json({ error: "Forbidden: Not your submission" }, { status: 403 })
+    }
+
     const { data, error } = await supabase
         .from("grades")
-        .select("id, score, feedback, graded_at, teacher:profiles!grades_teacher_id_fkey ( username )")
+        .select("id, teacher_id, score, feedback, graded_at, teacher:profiles!grades_teacher_id_fkey ( username )")
         .eq("submission_id", submissionId)
         .single()
 
@@ -87,14 +147,18 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ grade: null })
     }
 
-    const teacher = Array.isArray(data.teacher) ? data.teacher[0] : data.teacher
+    if (data.teacher_id && data.teacher_id !== teacher.id) {
+        return NextResponse.json({ error: "Forbidden: Not your submission" }, { status: 403 })
+    }
+
+    const gradeTeacher = Array.isArray(data.teacher) ? data.teacher[0] : data.teacher
     return NextResponse.json({
         grade: {
             id: data.id,
             score: data.score,
             feedback: data.feedback,
             graded_at: data.graded_at,
-            graded_by: teacher?.username ?? "unknown",
+            graded_by: gradeTeacher?.username ?? "unknown",
         },
     })
 }

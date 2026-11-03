@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { supabase } from "@/lib/supabase"
+import { createSupabaseAdmin } from "@/lib/supabase"
 import { verifyToken } from "@/lib/auth"
 import sanitizeHtml from "sanitize-html"
 
@@ -11,6 +11,8 @@ export async function GET(req: NextRequest) {
     if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     const session = verifyToken(token)
     if (!session) return NextResponse.json({ error: "Invalid session" }, { status: 401 })
+
+    const supabase = createSupabaseAdmin()
 
     let query = supabase
         .from("assignments")
@@ -87,6 +89,8 @@ export async function POST(req: NextRequest) {
         const safeTitle = sanitizeHtml(title.trim().slice(0, 500), { allowedTags: [], allowedAttributes: {} })
         const safeDesc = sanitizeHtml((description || "").trim().slice(0, 10000))
 
+        const supabase = createSupabaseAdmin()
+
         // Lookup teacher profile
         const { data: profile, error: profileErr } = await supabase
             .from("profiles")
@@ -155,6 +159,8 @@ export async function PUT(req: NextRequest) {
 
         if (!id) return NextResponse.json({ error: "Assignment ID is required" }, { status: 400 })
 
+        const supabase = createSupabaseAdmin()
+
         // Verify teacher owns this assignment
         const { data: profile } = await supabase
             .from("profiles")
@@ -216,6 +222,8 @@ export async function DELETE(req: NextRequest) {
         const { searchParams } = new URL(req.url)
         const id = searchParams.get("id")
         if (!id) return NextResponse.json({ error: "Assignment ID is required" }, { status: 400 })
+
+        const supabase = createSupabaseAdmin()
 
         const { data: profile } = await supabase
             .from("profiles")

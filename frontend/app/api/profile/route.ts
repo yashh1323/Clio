@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { supabase } from "@/lib/supabase"
+import { createSupabaseAdmin } from "@/lib/supabase"
 import { verifyToken } from "@/lib/auth"
 import sanitizeHtml from "sanitize-html"
 
@@ -9,6 +9,8 @@ export async function GET(req: NextRequest) {
     if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     const session = verifyToken(token)
     if (!session) return NextResponse.json({ error: "Invalid session" }, { status: 401 })
+
+    const supabase = createSupabaseAdmin()
 
     const { data: profile, error } = await supabase
         .from("profiles")
@@ -84,6 +86,8 @@ export async function PUT(req: NextRequest) {
         if (Object.keys(updateData).length === 0) {
             return NextResponse.json({ error: "No fields to update" }, { status: 400 })
         }
+
+        const supabase = createSupabaseAdmin()
 
         const { data, error } = await supabase
             .from("profiles")

@@ -1,0 +1,151 @@
+{
+  "testName": "Layer 2: Authentication Funnels & Teacher Invite Code Gate",
+  "projectId": "clio",
+  "targetUrl": "http://localhost:3000/register",
+  "priority": "p0",
+  "startedAt": "2026-11-03T11:06:13.160Z",
+  "status": "passed",
+  "steps": [
+    {
+      "index": 1,
+      "description": "navigate to http://localhost:3000/register",
+      "type": "action",
+      "status": "passed",
+      "durationMs": 544
+    },
+    {
+      "index": 2,
+      "description": "verify 'Create Account' is visible",
+      "type": "assertion",
+      "status": "passed",
+      "durationMs": 54
+    },
+    {
+      "index": 3,
+      "description": "click 'Create Account'",
+      "type": "action",
+      "status": "passed",
+      "durationMs": 499
+    },
+    {
+      "index": 4,
+      "description": "verify 'Username, email, and password are required' is visible",
+      "type": "assertion",
+      "status": "passed",
+      "durationMs": 19
+    },
+    {
+      "index": 5,
+      "description": "click 'Teacher'",
+      "type": "action",
+      "status": "passed",
+      "durationMs": 481
+    },
+    {
+      "index": 6,
+      "description": "verify 'Teacher Invite Code' is visible",
+      "type": "assertion",
+      "status": "passed",
+      "durationMs": 19
+    },
+    {
+      "index": 7,
+      "description": "type 'testteacher' into 'username'",
+      "type": "action",
+      "status": "passed",
+      "durationMs": 445
+    },
+    {
+      "index": 8,
+      "description": "type 'Test Teacher' into 'fullName'",
+      "type": "action",
+      "status": "passed",
+      "durationMs": 463
+    },
+    {
+      "index": 9,
+      "description": "type 'teacher@test.edu' into 'email'",
+      "type": "action",
+      "status": "passed",
+      "durationMs": 434
+    },
+    {
+      "index": 10,
+      "description": "type 'FACULTY_CODE' into 'inviteCode'",
+      "type": "action",
+      "status": "passed",
+      "durationMs": 469
+    },
+    {
+      "index": 11,
+      "description": "type 'password123' into 'password'",
+      "type": "action",
+      "status": "passed",
+      "durationMs": 435
+    },
+    {
+      "index": 12,
+      "description": "type 'mismatch456' into 'confirmPassword'",
+      "type": "action",
+      "status": "passed",
+      "durationMs": 432
+    },
+    {
+      "index": 13,
+      "description": "click 'Create Account'",
+      "type": "action",
+      "status": "passed",
+      "durationMs": 472
+    },
+    {
+      "index": 14,
+      "description": "verify 'Passwords do not match' is visible",
+      "type": "assertion",
+      "status": "passed",
+      "durationMs": 18
+    },
+    {
+      "index": 15,
+      "description": "navigate to http://localhost:3000/login",
+      "type": "action",
+      "status": "passed",
+      "durationMs": 541
+    },
+    {
+      "index": 16,
+      "description": "type 'nonexistent_user' into 'username'",
+      "type": "action",
+      "status": "passed",
+      "durationMs": 449
+    },
+    {
+      "index": 17,
+      "description": "type 'wrongpass' into 'password'",
+      "type": "action",
+      "status": "passed",
+      "durationMs": 420
+    },
+    {
+      "index": 18,
+      "description": "click 'Login'",
+      "type": "action",
+      "status": "passed",
+      "durationMs": 498
+    },
+    {
+      "index": 19,
+      "description": "verify 'Invalid credentials' is visible",
+      "type": "assertion",
+      "status": "passed",
+      "durationMs": 19
+    }
+  ],
+  "artifacts": [
+    "C:\\mini project\\clio\\auto_qa_tests\\artifacts\\run-final-1793703980635.png"
+  ],
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+  ],
+  "finishedAt": "2026-11-03T11:06:20.756Z",
+  "durationMs": 7596
+}

@@ -29,6 +29,7 @@ export default function RegisterPage() {
     const [role, setRole] = useState<"student" | "teacher">("student")
     const [course, setCourse] = useState("")
     const [studentClass, setStudentClass] = useState("")
+    const [inviteCode, setInviteCode] = useState("")
 
     // UI state
     const [showPassword, setShowPassword] = useState(false)
@@ -79,6 +80,7 @@ export default function RegisterPage() {
                     role,
                     course: course.trim(),
                     student_class: studentClass.trim(),
+                    invite_code: role === "teacher" ? inviteCode.trim() : undefined,
                 }),
             })
 
@@ -262,6 +264,24 @@ export default function RegisterPage() {
                                             className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
                                         />
                                     </div>
+                                </div>
+                            )}
+
+                            {/* Teacher-specific fields */}
+                            {role === "teacher" && (
+                                <div className="space-y-2">
+                                    <label htmlFor="inviteCode" className="flex items-center gap-1.5 text-xs font-semibold text-white/50 uppercase tracking-wider">
+                                        <Lock className="h-3.5 w-3.5" />Teacher Invite Code (if required)
+                                    </label>
+                                    <input
+                                        id="inviteCode"
+                                        type="password"
+                                        value={inviteCode}
+                                        onChange={(e) => setInviteCode(e.target.value)}
+                                        placeholder="Enter faculty invite code"
+                                        maxLength={200}
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
+                                    />
                                 </div>
                             )}
 

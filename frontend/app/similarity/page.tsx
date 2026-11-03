@@ -119,10 +119,11 @@ export default function SimilarityPage() {
         setLoadingContent(true)
         try {
             const [res1, res2] = await Promise.all([
-                fetch(`/api/submissions?id=${pair.submission1.id}`, { credentials: "include", signal: abortController.signal }),
-                fetch(`/api/submissions?id=${pair.submission2.id}`, { credentials: "include", signal: abortController.signal }),
+                fetch(`/api/submissions/${pair.submission1.id}`, { credentials: "include", signal: abortController.signal }),
+                fetch(`/api/submissions/${pair.submission2.id}`, { credentials: "include", signal: abortController.signal }),
             ])
-            const [data1, data2] = await Promise.all([res1.json(), res2.json()])
+            const data1 = res1.ok ? await res1.json().catch(() => null) : null
+            const data2 = res2.ok ? await res2.json().catch(() => null) : null
 
             if (abortController.signal.aborted) return
 

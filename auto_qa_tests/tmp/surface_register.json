@@ -1,0 +1,101 @@
+{
+  "url": "http://localhost:3000/register",
+  "title": "Clio",
+  "timestamp": "2026-11-03T11:01:23.105Z",
+  "elements": {
+    "buttons": [
+      {
+        "text": "Back to Login",
+        "tag": "button",
+        "type": "button"
+      },
+      {
+        "text": "Student",
+        "tag": "button",
+        "type": "button"
+      },
+      {
+        "text": "Teacher",
+        "tag": "button",
+        "type": "button"
+      },
+      {
+        "text": "Show password",
+        "tag": "button",
+        "type": "button",
+        "ariaLabel": "Show password"
+      },
+      {
+        "text": "Create Account",
+        "tag": "button",
+        "type": "submit"
+      },
+      {
+        "text": "Sign In",
+        "tag": "button",
+        "type": "button"
+      }
+    ],
+    "inputs": [
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "username",
+        "placeholder": "e.g. john_doe",
+        "label": "USERNAME",
+        "required": false
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "fullName",
+        "placeholder": "Your full name",
+        "label": "FULL NAME",
+        "required": false
+      },
+      {
+        "tag": "input",
+        "type": "email",
+        "id": "email",
+        "placeholder": "you@university.edu",
+        "label": "UNIVERSITY EMAIL",
+        "required": false
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "studentClass",
+        "placeholder": "e.g. CSE-2024",
+        "label": "CLASS / SECTION",
+        "required": false
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "course",
+        "placeholder": "e.g. Computer Science",
+        "label": "COURSE",
+        "required": false
+      },
+      {
+        "tag": "input",
+        "type": "password",
+        "id": "password",
+        "placeholder": "Min. 6 characters",
+        "label": "PASSWORD",
+        "required": false
+      },
+      {
+        "tag": "input",
+        "type": "password",
+        "id": "confirmPassword",
+        "placeholder": "Re-enter password",
+        "label": "CONFIRM PASSWORD",
+        "required": false
+      }
+    ],
+    "links": [],
+    "modals": []
+  },
+  "accessibilityTree": null
+}

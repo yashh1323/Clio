@@ -1,0 +1,29 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/main/schemas/plan.schema.json",
+  "projectId": "clio",
+  "type": "frontend",
+  "name": "Layer 2: Authentication Funnels & Teacher Invite Code Gate",
+  "priority": "p0",
+  "targetUrl": "http://localhost:3000/register",
+  "planSteps": [
+    { "type": "action", "description": "navigate to http://localhost:3000/register" },
+    { "type": "assertion", "description": "verify 'Create Account' is visible" },
+    { "type": "action", "description": "click 'Create Account'" },
+    { "type": "assertion", "description": "verify 'Username, email, and password are required' is visible" },
+    { "type": "action", "description": "click 'Teacher'" },
+    { "type": "assertion", "description": "verify 'Teacher Invite Code' is visible" },
+    { "type": "action", "description": "type 'testteacher' into 'username'" },
+    { "type": "action", "description": "type 'Test Teacher' into 'fullName'" },
+    { "type": "action", "description": "type 'teacher@test.edu' into 'email'" },
+    { "type": "action", "description": "type 'FACULTY_CODE' into 'inviteCode'" },
+    { "type": "action", "description": "type 'password123' into 'password'" },
+    { "type": "action", "description": "type 'mismatch456' into 'confirmPassword'" },
+    { "type": "action", "description": "click 'Create Account'" },
+    { "type": "assertion", "description": "verify 'Passwords do not match' is visible" },
+    { "type": "action", "description": "navigate to http://localhost:3000/login" },
+    { "type": "action", "description": "type 'nonexistent_user' into 'username'" },
+    { "type": "action", "description": "type 'wrongpass' into 'password'" },
+    { "type": "action", "description": "click 'Login'" },
+    { "type": "assertion", "description": "verify 'Invalid credentials' is visible" }
+  ]
+}

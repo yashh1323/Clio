@@ -7,23 +7,25 @@ import { NextRequest, NextResponse } from "next/server"
 // Routes that require authentication (and their allowed roles)
 const PROTECTED_ROUTES: { pattern: RegExp; roles: string[] }[] = [
     // Admin routes
-    { pattern: /^\/api\/admin/, roles: ["admin"] },
+    { pattern: /^\/api\/admin(\/.*)?$/, roles: ["admin"] },
     // Teacher-only routes
-    { pattern: /^\/api\/grades/, roles: ["teacher"] },
-    { pattern: /^\/api\/analytics/, roles: ["teacher"] },
-    { pattern: /^\/api\/similarity/, roles: ["teacher"] },
-    { pattern: /^\/api\/export/, roles: ["teacher"] },
-    { pattern: /^\/api\/classes/, roles: ["teacher"] },
+    { pattern: /^\/api\/grades(\/.*)?$/, roles: ["teacher"] },
+    { pattern: /^\/api\/analytics(\/.*)?$/, roles: ["teacher"] },
+    { pattern: /^\/api\/similarity(\/.*)?$/, roles: ["teacher"] },
+    { pattern: /^\/api\/export(\/.*)?$/, roles: ["teacher"] },
+    { pattern: /^\/api\/classes\/enroll(\/.*)?$/, roles: ["teacher", "admin"] },
     // Student-only routes
-    { pattern: /^\/api\/submissions\/mine/, roles: ["student"] },
-    { pattern: /^\/api\/notifications/, roles: ["student"] },
-    { pattern: /^\/api\/student-analytics/, roles: ["student"] },
-    // Both roles
-    { pattern: /^\/api\/submissions$/, roles: ["teacher", "student"] },
-    { pattern: /^\/api\/assignments/, roles: ["teacher", "student"] },
-    { pattern: /^\/api\/drafts/, roles: ["teacher", "student"] },
-    { pattern: /^\/api\/teachers/, roles: ["teacher", "student"] },
-    { pattern: /^\/api\/profile/, roles: ["teacher", "student"] },
+    { pattern: /^\/api\/submissions\/mine(\/.*)?$/, roles: ["student"] },
+    { pattern: /^\/api\/notifications(\/.*)?$/, roles: ["student"] },
+    { pattern: /^\/api\/student-analytics(\/.*)?$/, roles: ["student"] },
+    { pattern: /^\/api\/drafts(\/.*)?$/, roles: ["student"] },
+    // Shared routes
+    { pattern: /^\/api\/classes(\/.*)?$/, roles: ["teacher", "student", "admin"] },
+    { pattern: /^\/api\/submissions(\/.*)?$/, roles: ["teacher", "student", "admin"] },
+    { pattern: /^\/api\/convert-docx-to-pdf(\/.*)?$/, roles: ["teacher", "student", "admin"] },
+    { pattern: /^\/api\/assignments(\/.*)?$/, roles: ["teacher", "student", "admin"] },
+    { pattern: /^\/api\/teachers(\/.*)?$/, roles: ["teacher", "student", "admin"] },
+    { pattern: /^\/api\/profile(\/.*)?$/, roles: ["teacher", "student", "admin"] },
 ]
 
 // Pages that require specific roles
@@ -39,12 +41,12 @@ const PROTECTED_PAGES: { pattern: RegExp; roles: string[]; redirectTo: string }[
     { pattern: /^\/student-dashboard/, roles: ["student"], redirectTo: "/login" },
     { pattern: /^\/student-analytics/, roles: ["student"], redirectTo: "/login" },
     { pattern: /^\/drafts/, roles: ["student"], redirectTo: "/login" },
+    { pattern: /^\/profile/, roles: ["teacher", "student", "admin"], redirectTo: "/login" },
 ]
 
 // Routes that should NOT be intercepted
 const PUBLIC_ROUTES = [
     /^\/api\/auth\//,
-    /^\/api\/convert-docx-to-pdf/,
     /^\/api\/spotify/,
     /^\/login/,
     /^\/register/,
@@ -88,7 +90,15 @@ async function verifyTokenSignature(token: string): Promise<string | null> {
 
         const payloadJson = new TextDecoder().decode(base64UrlDecode(dataB64))
         const payload = JSON.parse(payloadJson)
-        return payload.role
+        if (payload && typeof payload.role === "string" && payload.role.length > 0) {
+            // Strictly check cryptographic expiration claim at the edge
+            const now = Math.floor(Date.now() / 1000)
+            if (typeof payload.exp !== "number" || payload.exp <= now) {
+                return null // Expired session fails closed at the edge
+            }
+            return payload.role.trim().toLowerCase()
+        }
+        return null
     } catch {
         return null
     }
@@ -114,19 +124,18 @@ export async function middleware(req: NextRequest) {
     // Check protected API routes
     const apiRoute = PROTECTED_ROUTES.find(r => r.pattern.test(pathname))
     if (apiRoute) {
-        if (!token) {
+        if (!token || !userRole) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
         }
-        if (userRole && !apiRoute.roles.includes(userRole)) {
+        if (!apiRoute.roles.includes(userRole)) {
             return NextResponse.json({ error: "Forbidden" }, { status: 403 })
         }
-        // The actual signature check still happens in each route handler for security.
     }
 
     // Check protected pages — redirect unauthenticated or unauthorized users
     const pageRoute = PROTECTED_PAGES.find(r => r.pattern.test(pathname))
     if (pageRoute) {
-        if (!token || (userRole && !pageRoute.roles.includes(userRole))) {
+        if (!token || !userRole || !pageRoute.roles.includes(userRole)) {
             return NextResponse.redirect(new URL(pageRoute.redirectTo, req.url))
         }
     }

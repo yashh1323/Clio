@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { supabase } from "@/lib/supabase"
+import { createSupabaseAdmin } from "@/lib/supabase"
 import { verifyToken } from "@/lib/auth"
 import sanitizeHtml from "sanitize-html"
 
@@ -11,6 +11,8 @@ export async function GET(req: NextRequest) {
     if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     const session = verifyToken(token)
     if (!session) return NextResponse.json({ error: "Invalid session" }, { status: 401 })
+
+    const supabase = createSupabaseAdmin()
 
     const { data: profile, error: profileErr } = await supabase
         .from("profiles")
@@ -95,6 +97,8 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Class name is required" }, { status: 400 })
         }
 
+        const supabase = createSupabaseAdmin()
+
         const { data: profile, error: profileErr } = await supabase
             .from("profiles")
             .select("id")
@@ -133,6 +137,8 @@ export async function DELETE(req: NextRequest) {
 
     const id = new URL(req.url).searchParams.get("id")
     if (!id) return NextResponse.json({ error: "Class ID required" }, { status: 400 })
+
+    const supabase = createSupabaseAdmin()
 
     const { data: profile, error: profileErr } = await supabase
         .from("profiles")

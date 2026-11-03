@@ -2,11 +2,13 @@
   "name": "clio",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node test_phase1_security.mjs && node test_phase2_security.mjs && node test_phase3_engine.mjs && node test_phase_fixes.mjs"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.2.4",

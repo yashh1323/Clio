@@ -1,0 +1,74 @@
+{
+  "testName": "Layer 3: Student Editor Route Guard & Interface Security",
+  "projectId": "clio",
+  "targetUrl": "http://localhost:3000/",
+  "priority": "p0",
+  "startedAt": "2026-11-03T11:20:56.536Z",
+  "status": "passed",
+  "steps": [
+    {
+      "index": 1,
+      "description": "navigate to http://localhost:3000/editor",
+      "type": "action",
+      "status": "passed",
+      "durationMs": 516
+    },
+    {
+      "index": 2,
+      "description": "verify path '/login'",
+      "type": "assertion",
+      "status": "passed",
+      "durationMs": 0
+    },
+    {
+      "index": 3,
+      "description": "verify 'Welcome to Clio' is visible",
+      "type": "assertion",
+      "status": "passed",
+      "durationMs": 53
+    },
+    {
+      "index": 4,
+      "description": "verify 'Login' is visible",
+      "type": "assertion",
+      "status": "passed",
+      "durationMs": 20
+    },
+    {
+      "index": 5,
+      "description": "type 'student' into 'username'",
+      "type": "action",
+      "status": "passed",
+      "durationMs": 439
+    },
+    {
+      "index": 6,
+      "description": "type 'test' into 'password'",
+      "type": "action",
+      "status": "passed",
+      "durationMs": 418
+    },
+    {
+      "index": 7,
+      "description": "click 'Login'",
+      "type": "action",
+      "status": "passed",
+      "durationMs": 469
+    },
+    {
+      "index": 8,
+      "description": "verify 'Invalid credentials' is visible",
+      "type": "assertion",
+      "status": "passed",
+      "durationMs": 19
+    }
+  ],
+  "artifacts": [
+    "C:\\mini project\\clio\\auto_qa_tests\\artifacts\\run-final-1793704859186.png"
+  ],
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+  ],
+  "finishedAt": "2026-11-03T11:20:59.313Z",
+  "durationMs": 2777
+}

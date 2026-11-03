@@ -9,6 +9,8 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=development
+      - CLIO_ENGINE_URL=http://engine:8088
+      - CLIO_ENGINE_KEY=${CLIO_ENGINE_KEY:-}
       # Note: Contributors must provide their own .env.local 
       # or you can load them automatically if .env is present
     env_file:
@@ -17,3 +19,15 @@ services:
       - ./frontend:/app
       - /app/node_modules
       - /app/.next
+
+  engine:
+    build:
+      context: ./engine-rust
+      dockerfile: Dockerfile
+    ports:
+      - "8088:8088"
+    environment:
+      - PORT=8088
+      - CLIO_ENGINE_HOST=0.0.0.0
+      - CLIO_ENGINE_KEY=${CLIO_ENGINE_KEY:-}
+

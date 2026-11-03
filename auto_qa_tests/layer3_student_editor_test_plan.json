@@ -1,0 +1,18 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/main/schemas/plan.schema.json",
+  "projectId": "clio",
+  "type": "frontend",
+  "name": "Layer 3: Student Editor Route Guard & Interface Security",
+  "priority": "p0",
+  "targetUrl": "http://localhost:3000/editor",
+  "planSteps": [
+    { "type": "action", "description": "navigate to http://localhost:3000/editor" },
+    { "type": "assertion", "description": "verify path '/login'" },
+    { "type": "assertion", "description": "verify 'Welcome to Clio' is visible" },
+    { "type": "assertion", "description": "verify 'Login' is visible" },
+    { "type": "action", "description": "type 'student' into 'username'" },
+    { "type": "action", "description": "type 'test' into 'password'" },
+    { "type": "action", "description": "click 'Login'" },
+    { "type": "assertion", "description": "verify 'Invalid credentials' is visible" }
+  ]
+}

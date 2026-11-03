@@ -1,0 +1,23 @@
+{
+  "url": "http://localhost:3000/",
+  "title": "Clio",
+  "timestamp": "2026-11-03T11:00:58.601Z",
+  "elements": {
+    "buttons": [
+      {
+        "text": "Let's Go",
+        "tag": "button",
+        "type": "button"
+      }
+    ],
+    "inputs": [],
+    "links": [
+      {
+        "text": "Let's Go",
+        "href": "/login"
+      }
+    ],
+    "modals": []
+  },
+  "accessibilityTree": null
+}

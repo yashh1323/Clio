@@ -70,7 +70,7 @@ export async function DELETE(req: NextRequest) {
 
     if (error) {
         console.error("Error deleting submission:", error)
-        return NextResponse.json({ error: error.message }, { status: 500 })
+        return NextResponse.json({ error: (error as { message: string }).message }, { status: 500 })
     }
 
     if (!data || data.length === 0) {

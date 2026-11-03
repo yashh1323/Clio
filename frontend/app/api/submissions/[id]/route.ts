@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { supabase } from "@/lib/supabase"
+import { createSupabaseAdmin } from "@/lib/supabase"
 import { verifyToken } from "@/lib/auth"
 
 export const runtime = 'nodejs'
@@ -18,6 +18,8 @@ export async function GET(
     if (!session) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
+
+    const supabase = createSupabaseAdmin()
 
     const { data: profile } = await supabase
         .from("profiles")

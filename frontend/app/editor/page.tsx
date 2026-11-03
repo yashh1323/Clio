@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect, useRef, useCallback, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 
 import { Modal } from "../../components/ui/modal"
 import { Button } from "../../components/ui/button"
@@ -15,8 +15,10 @@ import { saveToDB, getFromDB, removeFromDB } from "../../lib/db"
 import { ThemeToggle } from "../../components/ui/theme-toggle"
 import { WebGLShader } from "../../components/ui/web-gl-shader"
 
-export default function EditorPage() {
+function EditorPageContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const [activeDraftId, setActiveDraftId] = useState<string | null>(null)
   // content starts as string, but can be set to JSON object for initialization
   const [content, setContent] = useState<any>("")
   const [html, setHtml] = useState("")
@@ -31,7 +33,7 @@ export default function EditorPage() {
   const [isExporting, setIsExporting] = useState(false)
   const [selectedTeacher, setSelectedTeacher] = useState("")
   const [teachers, setTeachers] = useState<{ id: string; username: string }[]>([])
-  const [assignments, setAssignments] = useState<{ id: string; title: string; description: string; due_date: string | null; max_word_count: number | null }[]>([])
+  const [assignments, setAssignments] = useState<{ id: string; title: string; description: string; due_date: string | null; max_word_count: number | null; teacher_id?: string | null }[]>([])
   const [selectedAssignment, setSelectedAssignment] = useState("")
   const [showInstructions, setShowInstructions] = useState(false)
   const [isLoaded, setIsLoaded] = useState(false)
@@ -63,58 +65,106 @@ export default function EditorPage() {
 
   const lastTypingAtRef = useRef<number | null>(null)
   const lastTypingLenRef = useRef(0)
+  const lastRawSnapshotTimeRef = useRef<number | null>(null)
   const statusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const activeTypingMsRef = useRef(0)   // total milliseconds of active typing
   const IDLE_THRESHOLD_MS = 5000        // gaps longer than 5s are considered idle
 
-  // Load persistence data on mount
+  // Load initial editor data: either from cloud draft (?draft=<id>) or local IndexedDB fallback
   useEffect(() => {
-    const loadData = async () => {
+    let cancelled = false
+
+    async function initializeEditor() {
+      setIsLoaded(false)
+      const draftId = searchParams.get("draft")
+
+      if (draftId) {
+        try {
+          const res = await fetch(`/api/drafts?id=${draftId}`, { credentials: "include" })
+          if (res.ok) {
+            const draft = await res.json()
+            if (!cancelled && draft) {
+              setActiveDraftId(draft.id)
+              if (draft.title) setTitle(draft.title)
+              if (draft.assignment_id) setSelectedAssignment(draft.assignment_id)
+              if (draft.json_content && typeof draft.json_content === "object" && Object.keys(draft.json_content).length > 0) {
+                setContent(draft.json_content)
+                setJson(draft.json_content)
+              } else if (draft.html) {
+                setContent(draft.html)
+                setHtml(draft.html)
+              } else if (draft.content) {
+                setContent(draft.content)
+              }
+              if (draft.html) {
+                setHtml(draft.html)
+              }
+              setIsLoaded(true)
+              return
+            }
+          } else {
+            console.error("Failed to load draft:", res.status)
+          }
+        } catch (err) {
+          console.error("Error loading draft:", err)
+        }
+      }
+
+      // Fallback: Load persistence data from IndexedDB / localStorage
       try {
         const savedJson = await getFromDB("clio_json")
         const savedHtml = await getFromDB("clio_html")
-        const savedContent = await getFromDB("clio_content") // This might be text or legacy
+        const savedContent = await getFromDB("clio_content")
 
         const savedTitle = localStorage.getItem("clio_title")
         const savedSubtitle = localStorage.getItem("clio_subtitle")
         const savedWpm = localStorage.getItem("clio_wpm")
         const savedPasteCount = localStorage.getItem("clio_pasteCount")
 
-        // Prioritize JSON, then HTML, then Text
-        if (savedJson) {
-          setContent(savedJson)
-          setJson(savedJson)
-        } else if (savedHtml) {
-          setContent(savedHtml)
-          setHtml(savedHtml)
-        } else if (savedContent) {
-          setContent(savedContent)
-        }
+        if (!cancelled) {
+          setActiveDraftId(null)
+          // Prioritize JSON, then HTML, then Text
+          if (savedJson) {
+            setContent(savedJson)
+            setJson(savedJson)
+          } else if (savedHtml) {
+            setContent(savedHtml)
+            setHtml(savedHtml)
+          } else if (savedContent) {
+            setContent(savedContent)
+          }
 
-        // Always restore html separately so submission never sends blank
-        if (savedHtml) {
-          setHtml(savedHtml)
+          if (savedHtml) setHtml(savedHtml)
+          if (savedTitle) setTitle(savedTitle)
+          if (savedSubtitle) setSubtitle(savedSubtitle)
+          if (savedWpm) setWpm(parseInt(savedWpm))
+          if (savedPasteCount) setPasteCount(parseInt(savedPasteCount))
         }
-
-        if (savedTitle) setTitle(savedTitle)
-        if (savedSubtitle) setSubtitle(savedSubtitle)
-        if (savedWpm) setWpm(parseInt(savedWpm))
-        if (savedPasteCount) setPasteCount(parseInt(savedPasteCount))
       } catch (err) {
         console.error("Error loading saved state:", err)
       } finally {
-        setIsLoaded(true)
+        if (!cancelled) {
+          setIsLoaded(true)
+        }
       }
     }
-    // Add a timeout fallback so the spinner never hangs forever
-    const timeout = setTimeout(() => setIsLoaded(true), 3000)
-    loadData().finally(() => clearTimeout(timeout))
+
+    const timeout = setTimeout(() => {
+      if (!cancelled) setIsLoaded(true)
+    }, 5000)
+
+    initializeEditor().finally(() => clearTimeout(timeout))
 
     // Load replay snapshots
     getFromDB("clio_replay_snapshots").then((saved) => {
-      if (saved && Array.isArray(saved)) setReplaySnapshots(saved)
+      if (!cancelled && saved && Array.isArray(saved)) setReplaySnapshots(saved)
     }).catch(() => { })
-  }, [])
+
+    return () => {
+      cancelled = true
+      clearTimeout(timeout)
+    }
+  }, [searchParams])
 
   // Fetch available teachers and assignments on mount
   useEffect(() => {
@@ -143,6 +193,16 @@ export default function EditorPage() {
     loadTeachers()
     loadAssignments()
   }, [])
+
+  // Synchronize teacher binding when assignment changes or assignments load
+  useEffect(() => {
+    if (selectedAssignment && assignments.length > 0) {
+      const a = assignments.find(a => a.id === selectedAssignment)
+      if (a?.teacher_id) {
+        setSelectedTeacher(a.teacher_id)
+      }
+    }
+  }, [selectedAssignment, assignments])
 
   // Auth + Role Check — only students can access the editor
   useEffect(() => {
@@ -182,6 +242,25 @@ export default function EditorPage() {
         localStorage.setItem("clio_subtitle", subtitle)
         localStorage.setItem("clio_wpm", wpm.toString())
         localStorage.setItem("clio_pasteCount", pasteCount.toString())
+
+        if (activeDraftId) {
+          const textToCount = typeof content === 'string' ? content : html
+          const wordCount = textToCount.trim().split(/\s+/).filter(Boolean).length
+          fetch("/api/drafts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({
+              id: activeDraftId,
+              title,
+              content: typeof content === 'string' ? content : html,
+              html,
+              json_content: json || {},
+              word_count: wordCount,
+              assignment_id: selectedAssignment || undefined,
+            }),
+          }).catch(() => {})
+        }
       } catch (err) {
         console.error("Error auto-saving state:", err)
       } finally {
@@ -189,9 +268,9 @@ export default function EditorPage() {
       }
     }
 
-    const timeoutId = setTimeout(saveData, 500)
+    const timeoutId = setTimeout(saveData, 1000)
     return () => clearTimeout(timeoutId)
-  }, [content, html, json, title, subtitle, wpm, pasteCount, isLoaded])
+  }, [content, html, json, title, subtitle, wpm, pasteCount, isLoaded, activeDraftId, selectedAssignment])
 
   // Analytics Logic
   // WPM is updated in onChange to avoid render loops
@@ -731,29 +810,41 @@ export default function EditorPage() {
         ? html
         : (typeof content === 'string' ? content : '')
 
-      // ── Thin out replay snapshots to prevent huge payloads ──
-      // Keep at most 200 evenly-spaced snapshots
-      const MAX_SNAPSHOTS = 200
-      const MAX_HTML_LENGTH = 200_000 // Increased limit to prevent breaking HTML tags
-      let trimmedSnapshots = replaySnapshots
-      if (trimmedSnapshots.length > MAX_SNAPSHOTS) {
-        const step = trimmedSnapshots.length / MAX_SNAPSHOTS
-        const sampled: typeof replaySnapshots = []
-        for (let i = 0; i < MAX_SNAPSHOTS; i++) {
-          sampled.push(trimmedSnapshots[Math.floor(i * step)])
+      // ── Subsample heavy HTML markup while preserving all verification metadata intact ──
+      // Preserve lightweight verification metadata { timestamp, textLength } intact for verification auditing,
+      // subsampling only the heavy HTML markup for replay storage (at most MAX_HTML_SNAPSHOTS).
+      const MAX_SNAPSHOTS = 10_000
+      const MAX_HTML_SNAPSHOTS = 200
+      const MAX_HTML_LENGTH = 50_000
+
+      const cappedSnapshots = replaySnapshots.slice(0, MAX_SNAPSHOTS)
+      const htmlIndices = new Set<number>()
+      if (cappedSnapshots.length <= MAX_HTML_SNAPSHOTS) {
+        for (let i = 0; i < cappedSnapshots.length; i++) {
+          htmlIndices.add(i)
         }
-        // Always include the very last snapshot
-        sampled[sampled.length - 1] = trimmedSnapshots[trimmedSnapshots.length - 1]
-        trimmedSnapshots = sampled
+      } else {
+        for (let i = 0; i < MAX_HTML_SNAPSHOTS - 1; i++) {
+          htmlIndices.add(Math.floor((i * (cappedSnapshots.length - 1)) / (MAX_HTML_SNAPSHOTS - 1)))
+        }
+        htmlIndices.add(0)
+        htmlIndices.add(cappedSnapshots.length - 1)
       }
-      trimmedSnapshots = trimmedSnapshots.map(snap => {
-        // Replace large base64 images with placeholders so we don't bloat the payload
-        const cleanHtml = snap.html ? snap.html.replace(/src="data:image\/[^;]+;base64,[^"]+"/g, 'src="" class="placeholder-image"') : "";
+
+      const auditSnapshots = cappedSnapshots.map((snap, idx) => {
+        if (!htmlIndices.has(idx)) {
+          return {
+            timestamp: snap.timestamp,
+            textLength: snap.textLength,
+            html: "",
+          }
+        }
+
+        const cleanHtml = snap.html ? snap.html.replace(/src="data:image\/[^;]+;base64,[^"]+"/g, 'src="" class="placeholder-image"') : ""
         return {
-          ...snap,
-          html: cleanHtml.length > MAX_HTML_LENGTH
-            ? cleanHtml.slice(0, MAX_HTML_LENGTH)
-            : cleanHtml
+          timestamp: snap.timestamp,
+          textLength: snap.textLength,
+          html: cleanHtml.length > MAX_HTML_LENGTH ? cleanHtml.slice(0, MAX_HTML_LENGTH) : cleanHtml,
         }
       })
 
@@ -764,10 +855,10 @@ export default function EditorPage() {
           assignment_title: assignmentObj ? assignmentObj.title : (title || "Untitled"),
           assignment_id: selectedAssignment || undefined,
           content: essayContent,
-          replay_snapshots: trimmedSnapshots,
+          replay_snapshots: auditSnapshots,
           wpm,
           paste_count: pasteCount,
-          teacher_id: selectedTeacher,
+          teacher_id: selectedTeacher || undefined,
         }),
       })
 
@@ -791,6 +882,11 @@ export default function EditorPage() {
       localStorage.removeItem("clio_subtitle")
       localStorage.removeItem("clio_wpm")
       localStorage.removeItem("clio_pasteCount")
+
+      if (activeDraftId) {
+        await fetch(`/api/drafts?id=${activeDraftId}`, { method: "DELETE", credentials: "include" }).catch(() => {})
+        setActiveDraftId(null)
+      }
 
       setModalState({
         isOpen: true,
@@ -827,12 +923,12 @@ export default function EditorPage() {
       })
       return
     }
-    if (!selectedTeacher) {
+    if (!selectedTeacher && !selectedAssignment) {
       setModalState({
         isOpen: true,
         type: "error",
         title: "No Teacher Selected",
-        message: "Please select a teacher to submit your essay to."
+        message: "Please select a teacher or assignment to submit your essay to."
       })
       return
     }
@@ -857,15 +953,29 @@ export default function EditorPage() {
       localStorage.setItem("clio_subtitle", subtitle)
       localStorage.setItem("clio_wpm", String(wpm))
       localStorage.setItem("clio_pasteCount", String(pasteCount))
+
+      if (activeDraftId) {
+        await fetch("/api/drafts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            id: activeDraftId,
+            title,
+            content: typeof content === 'string' ? content : html,
+            html,
+            json_content: json || {},
+            word_count: (typeof content === 'string' ? content : html).trim().split(/\s+/).filter(Boolean).length,
+            assignment_id: selectedAssignment || undefined,
+          })
+        })
+      }
     } catch { /* silent */ }
     setTimeout(() => setIsSaving(false), 400)
-  }, [json, html, content, title, subtitle, wpm, pasteCount])
+  }, [json, html, content, title, subtitle, wpm, pasteCount, activeDraftId, selectedAssignment])
 
   const handlersRef = useRef({ handleSaveDraft, handleSubmit, handleExportPdf, handleExportDocx, isExporting, setFocusMode })
-
-  useEffect(() => {
-    handlersRef.current = { handleSaveDraft, handleSubmit, handleExportPdf, handleExportDocx, isExporting, setFocusMode }
-  }, [handleSaveDraft, handleSubmit, handleExportPdf, handleExportDocx, isExporting, setFocusMode])
+  handlersRef.current = { handleSaveDraft, handleSubmit, handleExportPdf, handleExportDocx, isExporting, setFocusMode }
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -943,9 +1053,13 @@ export default function EditorPage() {
               <select
                 value={selectedAssignment}
                 onChange={(e) => {
-                  setSelectedAssignment(e.target.value)
-                  const a = assignments.find(a => a.id === e.target.value)
-                  if (a) setTitle(a.title)
+                  const assignmentId = e.target.value
+                  setSelectedAssignment(assignmentId)
+                  const a = assignments.find(a => a.id === assignmentId)
+                  if (a) {
+                    setTitle(a.title)
+                    if (a.teacher_id) setSelectedTeacher(a.teacher_id)
+                  }
                 }}
                 className="text-sm font-bold text-foreground bg-accent/20 border border-border rounded px-2 py-1 backdrop-blur-md focus:outline-none focus:border-ring/30 cursor-pointer appearance-none max-w-[260px]"
               >
@@ -1143,6 +1257,7 @@ export default function EditorPage() {
           ) : null}
           {isLoaded ? (
             <RichEditor
+              key={activeDraftId || "local"}
               content={content}
               onChange={(text) => {
                 const now = Date.now()
@@ -1199,18 +1314,21 @@ export default function EditorPage() {
               onHtmlChange={setHtml}
               onJsonChange={setJson}
               onSnapshot={(snapshot) => {
+                const rawNow = snapshot.timestamp
+                const lastRaw = lastRawSnapshotTimeRef.current
+                lastRawSnapshotTimeRef.current = rawNow
+
                 setReplaySnapshots(prev => {
                   const last = prev[prev.length - 1]
                   let effectiveTimestamp = snapshot.timestamp
 
                   // ── Time Compression Logic ──
-                  // If the user was idle for more than 5 seconds, we "compress" the gap
-                  // so the replay doesn't show hours of nothing.
+                  // Compresses idle gaps > 5000ms down to 1000ms while preserving real keystroke deltas,
+                  // avoiding subtraction of compressed timestamps from raw wall-clock Date.now().
                   if (last) {
-                    const realGap = snapshot.timestamp - last.timestamp
-                    if (realGap > 5000) {
-                      effectiveTimestamp = last.timestamp + 1000 // Just 1s after the last one
-                    }
+                    const rawGap = lastRaw !== null ? Math.max(0, rawNow - lastRaw) : 5001
+                    const delta = Math.max(1, rawGap > 5000 ? 1000 : rawGap)
+                    effectiveTimestamp = last.timestamp + delta
                   }
 
                   const nextSnapshot = { ...snapshot, timestamp: effectiveTimestamp }
@@ -1351,5 +1469,19 @@ export default function EditorPage() {
         <div className="whitespace-pre-line">{modalState.message}</div>
       </Modal>
     </div>
+  )
+}
+
+export default function EditorPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-screen w-screen items-center justify-center bg-background">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      }
+    >
+      <EditorPageContent />
+    </Suspense>
   )
 }

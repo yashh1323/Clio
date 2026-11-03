@@ -1,91 +1,93 @@
 # Contributing to Clio
 
-First off, thank you for considering contributing to Clio! It's people like you that make Clio an incredible platform for academic integrity.
+Thank you for contributing to **Clio**! Whether you are fixing a bug in the Next.js 16 frontend, optimizing parallel algorithms in the Pure Rust compute engine (`engine-rust/`), or adding security regression tests, your work helps protect both honest students and instructors.
 
 ## Table of Contents
-1. [Welcome](#welcome)
-2. [Code of Conduct](#code-of-conduct)
-3. [How You Can Help](#how-you-can-help)
-   - [Reporting Bugs](#reporting-bugs)
-   - [Suggesting Enhancements](#suggesting-enhancements)
-   - [Pull Requests](#pull-requests)
-4. [Local Development Setup](#local-development-setup)
+1. [Code of Conduct](#code-of-conduct)
+2. [How You Can Help](#how-you-can-help)
+3. [Local Development Setup](#local-development-setup)
+4. [Verification & Test Suites](#verification--test-suites)
 5. [Code Style & Standards](#code-style--standards)
 
 ---
 
-## Welcome
-We welcome contributions from everyone—whether you're fixing a typo, resolving a bug in the Next.js frontend, or optimizing Python backend endpoints. 
-
 ## Code of Conduct
-This project and everyone participating in it is governed by the [Clio Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code.
+This project and everyone participating in it is governed by the [Clio Code of Conduct](CODE_OF_CONDUCT.md). For security-sensitive findings, please follow [SECURITY.md](SECURITY.md).
 
 ## How You Can Help
 
-### Reporting Bugs
-Bugs are tracked as GitHub issues. When creating an issue, please:
-- Use the **Bug Report** issue template.
-- Explain the problem and include additional details to help maintainers reproduce the problem.
-- Include screenshots or animated GIFs if it is a visual bug.
-
-### Suggesting Enhancements
-Enhancement suggestions are tracked as GitHub issues.
-- Use the **Feature Request** issue template.
-- Provide a clear and descriptive title.
-- Provide a step-by-step description of the suggested enhancement.
-- Explain why this enhancement would be useful to most users.
+### Reporting Bugs & Suggesting Enhancements
+- Open a GitHub Issue with reproduction steps, environment details (`node -v`, `rustc --version`), and relevant logs.
+- For UI or TipTap editor issues, attach a screenshot or session replay snippet if applicable.
 
 ### Pull Requests
-1. Fork the repo and create your branch from `main`.
-2. If you've added code that should be tested, add tests.
-3. If you've changed APIs, update the documentation.
-4. Ensure the test suite passes.
-5. Make sure your code lints.
-6. Issue that pull request!
+1. Fork the repository and create your branch from `main`.
+2. Add or update unit/integration tests covering your change (`engine-rust/tests/` or `frontend/test_*.mjs`).
+3. Update documentation in `docs/` if you modify API contracts, environment variables, or database columns.
+4. Confirm both `cargo test` and `npm test` pass with zero warnings before submitting your PR.
 
 ---
 
 ## Local Development Setup
 
-### Option 1: Docker (Recommended)
-You can run the entire stack (Frontend + Backend) using Docker Compose:
+### Option 1: Docker Compose (Recommended for Full Stack)
+Run both the Next.js 16 Web Studio (`:3000`) and the Rust Compute Microservice (`:8088`):
 ```bash
-docker-compose up --build
+docker compose up --build
 ```
-- Frontend will be available at `http://localhost:3000`
-- Backend will be available at `http://localhost:8000`
+- **Web Studio & API**: `http://localhost:3000`
+- **Rust Compute Engine**: `http://127.0.0.1:8088` (`/health`, `/metrics`, `/api/v1/*`)
 
-### Option 2: Manual Setup
-#### Frontend (Next.js)
+### Option 2: Native Local Development
+#### 1. Configure Environment Variables
+Copy `frontend/.env.example` to `frontend/.env.local` and supply your Supabase project credentials:
+```bash
+cd frontend
+cp .env.example .env.local
+```
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://<your-project-id>.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<your-supabase-anon-key>
+SUPABASE_SERVICE_ROLE_KEY=<your-supabase-service-role-key>
+AUTH_SECRET=replace_with_64_char_cryptographic_random_hex_secret
+TEACHER_INVITE_CODE=replace_with_institutional_faculty_invite_code
+CLIO_ENGINE_URL=http://127.0.0.1:8088
+CLIO_ENGINE_KEY=replace_with_shared_hmac_engine_key
+```
+
+#### 2. Start the Rust Compute Engine (`engine-rust/`)
+```bash
+cd engine-rust
+cargo run --release
+```
+
+#### 3. Start the Next.js 16 Frontend (`frontend/`)
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
+*(On Windows, you can also run `start-clio.bat` from the repository root to launch both services together.)*
 
-#### Backend (Python/FastAPI)
+---
+
+## Verification & Test Suites
+
+Before opening a pull request, run the verification suites:
 ```bash
-cd backend
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
-python main.py
-```
+# Rust Engine unit, integration, and Clippy lint checks (40 tests)
+cd engine-rust
+cargo test
+cargo clippy --all-targets -- -D warnings
 
-### Environment Variables
-For the project to run correctly, you need to connect to a Supabase database. Create a `.env.local` inside the `/frontend` directory:
-```env
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-SUPABASE_SERVICE_ROLE_KEY=your_supabase_secret_key
-AUTH_SECRET=your_auth_secret_or_random_string
+# Frontend security, telemetry, and Strangler Fig integration suites (38 assertions)
+cd ../frontend
+npm test
 ```
 
 ---
 
 ## Code Style & Standards
-- **Frontend**: We use `eslint` and `prettier` standard rules for Next.js 15. Run `npm run lint` before committing.
-- **Backend**: Python code should generally follow PEP 8 standards. 
-- **Commits**: Try to follow Conventional Commits format (e.g., `feat: added grading feature`, `fix: corrected login routing`).
-
-We can't wait to see what you build! Let's make academic integrity better, together.
+- **Frontend (`frontend/`)**: TypeScript + Next.js 16 App Router. Run `npm run lint` and `npm test` before committing.
+- **Rust Engine (`engine-rust/`)**: Idiomatic Rust (2024 edition). Format with `cargo fmt` and verify zero warnings with `cargo clippy --all-targets -- -D warnings`.
+- **Commits**: Follow Conventional Commits format (e.g., `feat(engine): add LSH candidate bucket pruning`, `fix(auth): enforce constant-time invite check`).

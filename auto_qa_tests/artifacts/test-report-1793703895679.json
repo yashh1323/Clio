@@ -1,0 +1,46 @@
+{
+  "testName": "Layer 1: Route Navigation & Landing Page Flow",
+  "projectId": "clio",
+  "targetUrl": "http://localhost:3000/",
+  "priority": "p0",
+  "startedAt": "2026-11-03T11:04:53.488Z",
+  "status": "failed",
+  "steps": [
+    {
+      "index": 1,
+      "description": "navigate to http://localhost:3000/",
+      "type": "action",
+      "status": "passed",
+      "durationMs": 527
+    },
+    {
+      "index": 2,
+      "description": "verify \"Let's Go\" is visible",
+      "type": "assertion",
+      "status": "passed",
+      "durationMs": 51
+    },
+    {
+      "index": 3,
+      "description": "click \"Let's Go\"",
+      "type": "action",
+      "status": "passed",
+      "durationMs": 527
+    },
+    {
+      "index": 4,
+      "description": "verify URL contains '/login'",
+      "type": "assertion",
+      "status": "failed",
+      "error": "Assertion failed: Expected text \"/login\" was not found.",
+      "durationMs": 5
+    }
+  ],
+  "artifacts": [
+    "C:\\mini project\\clio\\auto_qa_tests\\artifacts\\failure-step-4.png",
+    "C:\\mini project\\clio\\auto_qa_tests\\artifacts\\run-final-1793703895575.png"
+  ],
+  "consoleErrors": [],
+  "finishedAt": "2026-11-03T11:04:55.679Z",
+  "durationMs": 2191
+}

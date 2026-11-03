@@ -1,13 +1,56 @@
 import { NextRequest, NextResponse } from "next/server"
-import { supabase } from "@/lib/supabase"
+import { createSupabaseAdmin } from "@/lib/supabase"
 import bcrypt from "bcryptjs"
+import crypto from "crypto"
 import sanitizeHtml from "sanitize-html"
+
+// ── Rate Limiting (In-Memory with Bounded TTL Pruning) ──
+const rateLimitMap = new Map<string, { count: number; resetTime: number }>()
+const RATE_LIMIT_MAX = 10
+const RATE_LIMIT_WINDOW_MS = 60 * 1000
+const RATE_LIMIT_MAX_ENTRIES = 10_000
+
+function checkRateLimit(identifier: string): boolean {
+    const now = Date.now()
+    for (const [key, entry] of rateLimitMap.entries()) {
+        if (now > entry.resetTime) {
+            rateLimitMap.delete(key)
+        }
+    }
+
+    const userLimit = rateLimitMap.get(identifier)
+    if (!userLimit || now > userLimit.resetTime) {
+        if (!rateLimitMap.has(identifier) && rateLimitMap.size >= RATE_LIMIT_MAX_ENTRIES) {
+            const oldestKey = rateLimitMap.keys().next().value
+            if (oldestKey !== undefined) {
+                rateLimitMap.delete(oldestKey)
+            }
+        }
+        rateLimitMap.set(identifier, { count: 1, resetTime: now + RATE_LIMIT_WINDOW_MS })
+        return true
+    }
+
+    if (userLimit.count >= RATE_LIMIT_MAX) {
+        return false
+    }
+
+    userLimit.count += 1
+    return true
+}
 
 // ── POST /api/auth/register — Create a new student or teacher account ──
 export async function POST(req: NextRequest) {
+    const clientIp =
+        req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+        req.headers.get("x-real-ip")?.trim() ||
+        "unknown"
+    if (!checkRateLimit(clientIp)) {
+        return NextResponse.json({ error: "Too Many Requests" }, { status: 429 })
+    }
+
     try {
         const body = await req.json()
-        const { username, password, full_name, email, role, course, student_class } = body as {
+        const { username, password, full_name, email, role, course, student_class, invite_code } = body as {
             username?: string
             password?: string
             full_name?: string
@@ -15,6 +58,7 @@ export async function POST(req: NextRequest) {
             role?: string
             course?: string
             student_class?: string
+            invite_code?: string
         }
 
         // ── Validation ──
@@ -49,8 +93,27 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Role must be 'student' or 'teacher'" }, { status: 400 })
         }
 
+        // ── Teacher Registration Invite Code Gate ──
+        const expectedInviteCode = (process.env.TEACHER_INVITE_CODE || "").trim()
+        if (role === "teacher" && expectedInviteCode.length > 0) {
+            const providedCode = typeof invite_code === "string" ? invite_code.trim() : ""
+            const expectedBuf = Buffer.from(expectedInviteCode, "utf8")
+            const providedBuf = Buffer.from(providedCode, "utf8")
+            const inviteMatches =
+                expectedBuf.length === providedBuf.length &&
+                crypto.timingSafeEqual(expectedBuf, providedBuf)
+            if (!inviteMatches) {
+                return NextResponse.json(
+                    { error: "Invalid or missing teacher invite code" },
+                    { status: 403 }
+                )
+            }
+        }
+
+        const supabaseAdmin = createSupabaseAdmin()
+
         // ── Check for duplicate username ──
-        const { data: existing, error: existingErr } = await supabase
+        const { data: existing, error: existingErr } = await supabaseAdmin
             .from("profiles")
             .select("id")
             .eq("username", cleanUsername)
@@ -64,7 +127,7 @@ export async function POST(req: NextRequest) {
         }
 
         // ── Check for duplicate email ──
-        const { data: existingEmail, error: emailErr } = await supabase
+        const { data: existingEmail, error: emailErr } = await supabaseAdmin
             .from("profiles")
             .select("id")
             .eq("email", cleanEmail)
@@ -99,7 +162,7 @@ export async function POST(req: NextRequest) {
             if (safeClass) insertData.class = safeClass
         }
 
-        const { error: insertErr } = await supabase
+        const { error: insertErr } = await supabaseAdmin
             .from("profiles")
             .insert(insertData)
 

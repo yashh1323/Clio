@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { supabase } from "@/lib/supabase"
+import { createSupabaseAdmin } from "@/lib/supabase"
 import { verifyToken } from "@/lib/auth"
 
 // ── POST /api/classes/enroll — Teacher enrolls students into a class ──
@@ -11,6 +11,8 @@ export async function POST(req: NextRequest) {
     if (!session || session.role !== "teacher") {
         return NextResponse.json({ error: "Forbidden: teachers only" }, { status: 403 })
     }
+
+    const supabase = createSupabaseAdmin()
 
     try {
         const body = await req.json()
@@ -78,6 +80,8 @@ export async function GET(req: NextRequest) {
     const classId = new URL(req.url).searchParams.get("class_id")
     if (!classId) return NextResponse.json({ error: "class_id is required" }, { status: 400 })
 
+    const supabase = createSupabaseAdmin()
+
     // Verify teacher owns this class
     const { data: teacherProfile } = await supabase
         .from("profiles")
@@ -136,6 +140,8 @@ export async function DELETE(req: NextRequest) {
 
     const enrollmentId = new URL(req.url).searchParams.get("enrollment_id")
     if (!enrollmentId) return NextResponse.json({ error: "enrollment_id is required" }, { status: 400 })
+
+    const supabase = createSupabaseAdmin()
 
     // Parallelize: profile lookup + enrollment lookup (independent)
     const [{ data: teacherProfile }, { data: enrollment }] = await Promise.all([

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { supabase } from "@/lib/supabase"
+import { createSupabaseAdmin } from "@/lib/supabase"
 import { verifyToken } from "@/lib/auth"
 
 // ── POST /api/grades/batch — Auto-advance batch grading ──
@@ -19,6 +19,7 @@ export async function POST(req: NextRequest) {
     }
 
     try {
+        const supabase = createSupabaseAdmin()
         // Parallelize: profile lookup + body parsing (independent)
         const [{ data: profile, error: profileErr }, body] = await Promise.all([
             supabase.from("profiles").select("id").eq("username", session.username).single(),

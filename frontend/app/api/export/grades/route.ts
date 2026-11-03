@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { supabase } from "@/lib/supabase"
+import { createSupabaseAdmin } from "@/lib/supabase"
 import { verifyToken } from "@/lib/auth"
 
 // ── GET /api/export/grades — Export all grades + submissions as CSV ──
@@ -11,6 +11,8 @@ export async function GET(req: NextRequest) {
     if (!session || session.role !== "teacher") {
         return NextResponse.json({ error: "Forbidden: teachers only" }, { status: 403 })
     }
+
+    const supabase = createSupabaseAdmin()
 
     // Get teacher profile
     const { data: profile, error: profileErr } = await supabase
@@ -58,13 +60,17 @@ export async function GET(req: NextRequest) {
     ]
 
     const escapeCSV = (val: string) => {
-        // CSV injection protection: prefix dangerous leading chars
-        const dangerousChars = ['=', '+', '-', '@', '\t', '\r']
+        // CSV injection protection: prefix dangerous leading chars (including after leading whitespace)
+        const dangerousChars = ['=', '+', '-', '@', '|', '\t', '\r']
         let safe = val
-        if (safe.length > 0 && dangerousChars.includes(safe[0])) {
+        const trimmed = val.trimStart()
+        if (
+            (safe.length > 0 && dangerousChars.includes(safe[0])) ||
+            (trimmed.length > 0 && dangerousChars.includes(trimmed[0]))
+        ) {
             safe = "'" + safe
         }
-        if (safe.includes(",") || safe.includes("\"") || safe.includes("\n")) {
+        if (safe.includes(",") || safe.includes("\"") || safe.includes("\n") || safe.includes("\r")) {
             return `"${safe.replace(/"/g, '""')}"`
         }
         return safe

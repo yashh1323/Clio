@@ -1,0 +1,21 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/main/schemas/plan.schema.json",
+  "projectId": "clio",
+  "type": "frontend",
+  "name": "Layer 1: Route Navigation & Landing Page Flow",
+  "priority": "p0",
+  "targetUrl": "http://localhost:3000",
+  "planSteps": [
+    { "type": "action", "description": "navigate to http://localhost:3000/" },
+    { "type": "assertion", "description": "verify \"Let's Go\" is visible" },
+    { "type": "action", "description": "click \"Let's Go\"" },
+    { "type": "assertion", "description": "verify path '/login'" },
+    { "type": "assertion", "description": "verify 'Welcome to Clio' is visible" },
+    { "type": "assertion", "description": "verify 'Login' is visible" },
+    { "type": "action", "description": "click 'Register'" },
+    { "type": "assertion", "description": "verify path '/register'" },
+    { "type": "assertion", "description": "verify 'Create Account' is visible" },
+    { "type": "action", "description": "click 'Back to Login'" },
+    { "type": "assertion", "description": "verify path '/login'" }
+  ]
+}

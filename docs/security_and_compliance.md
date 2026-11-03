@@ -1,57 +1,51 @@
 # Security, Privacy, and Compliance
 
-Clio is fundamentally an EdTech platform. Handling student data, grades, and behavioral telemetry requires the highest standard of ethical engineering, security, and privacy compliance.
-
-This document outlines how Clio protects user data, making it suitable for institutional adoption and compliant with major educational privacy frameworks (such as FERPA in the US and GDPR).
+Clio is an academic authorship and telemetry platform. Handling student coursework, grades, and drafting telemetry requires rigorous security, data minimization, and privacy compliance suitable for institutional adoption (FERPA and GDPR).
 
 ---
 
 ## 1. Ethical Telemetry: The "Proof of Write" Promise
 
-Clio captures behavioral data to verify authorship, but we draw a strict line against invasive student surveillance.
+Clio captures drafting progression signals to verify authorship while drawing a strict boundary against invasive surveillance.
 
-### What We DO Capture (Aggregated Ethics)
-*   **Paste Events**: The frequency and volume of large text blocks injected simultaneously.
-*   **Words Per Minute (WPM)**: A generalized moving average of typing speed to flag superhuman input.
-*   **Document Snapshots**: Periodic saves of the textual content to build a timeline "replay."
+### What Clio Captures
+*   **Paste Events**: Frequency and character volume of rapid text bursts (`>15 chars` in `<300ms` or `>=50 chars` in `<=2000ms`).
+*   **Active Words Per Minute (WPM)**: Typing speed calculated across active drafting intervals (with idle pauses `>5000ms` compressed to `1000ms`).
+*   **Subsampled Document Snapshots**: Periodic states of the document (`≤ 200` HTML snapshots at `≤ 50,000` characters each) to construct a verifiable session replay timeline.
 
-### What We DO NOT Capture (Zero Invasive Tracking)
-*   **No Keystroke Logging**: We do not capture individual keystrokes, key-up/key-down telemetry, or specific hardware input patterns outside of standard React `onChange` events.
-*   **No Peripheral Surveillance**: We never request or utilize Webcam, Microphone, or Screen Recording browser permissions.
-*   **No Browser Fingerprinting**: We do not trace students across other websites or attempt to break browser sandboxing to view other active tabs.
+### What Clio Never Captures
+*   **No Raw Keylogger Spyware**: Clio does not record OS-level keycodes or input outside the TipTap ProseMirror editor canvas.
+*   **No Peripheral Surveillance**: Clio never requests webcam, microphone, or screen-recording permissions.
+*   **No Cross-Site Fingerprinting**: Clio does not track students across external websites or inspect other browser tabs.
 
 ---
 
 ## 2. Threat Modeling & Server Security
 
-### Cross-Site Scripting (XSS) Prevention
-Because Clio's core feature is a rich-text editor allowing HTML submission, we assume all user input is actively malicious.
-*   **Client-Side**: Tiptap Editor natively sanitizes output HTML structure.
-*   **Server-Side Re-Sanitization**: Before any submitted essay is rendered on the Teacher Dashboard, it is aggressively scrubbed using `DOMpurify` inside the Node environment. This strips all `<script>`, `<iframe>`, and malicious `onerror` attributes, nullifying stored XSS attack vectors.
+### Cross-Site Scripting (XSS) & SSRF Prevention
+*   **Client-Side Sanitization**: TipTap ProseMirror enforces structured document schemas, and rendered HTML previews are sanitized via `DOMPurify`.
+*   **Server-Side Sanitization**: Submitted essay HTML and converted `.docx` documents are scrubbed on the server using `sanitize-html` (`frontend/app/api/submissions/route.ts` and `frontend/app/api/convert-docx-to-pdf/route.ts`), stripping `<script>`, `<iframe>`, `<object>`, inline event handlers (`onerror`, `onload`), and external CSS `url()` references.
+*   **Zero-Network PDF Rendering**: Standard PDF exports run in-process via the memory-safe Rust ISO 32000-1 PDF 1.4 compiler (`engine-rust/src/pdf.rs`). Legacy `.docx` conversions that fall back to headless rendering abort all `http:`, `https:`, `file:`, `ftp:`, `ws:`, `wss:`, and `javascript:` requests unconditionally, blocking both external hosts and RFC 1918 private networks.
 
 ### Insecure Direct Object Reference (IDOR) Mitigation
-Teachers should only see their students' submissions, and students should only see their own grades.
-*   Every API endpoint requires `uuid` validation against the secure JWT cookie.
-*   If a student requests `/api/submissions?submission_id=123` (where 123 belongs to another student), the backend verifies ownership against PostgreSQL before returning the payload, dropping unauthorized requests silently.
+*   Every API route validates the caller's role and identity from the cryptographically signed `clio_session` cookie.
+*   Grading endpoints (`/api/grades` and `/api/grades/batch`) verify that `submission.teacher_id` matches the authenticated instructor before recording scores.
+*   Gradebook CSV exports (`/api/export/grades`) neutralize spreadsheet formula injection payloads (`=`, `+`, `-`, `@`, `|`, `\t`, `\r`).
 
-### Cryptography
-*   All passwords are mathematically hashed and salted at the registration endpoint using `bcryptjs` with a secure cost factor. Plaintext passwords never exist in memory post-registration and are never stored in the database.
-*   Session tokens (`clio_session`) are signed utilizing `crypto/HMAC SHA-256`, preventing forged token attacks.
-
----
-
-## 3. Compliance Readiness
-
-### FERPA (Family Educational Rights and Privacy Act) - US
-Clio is built to act as a "School Official" handling educational records.
-*   **Data Portability & Deletion**: System Administrators have standard CRUD capability to permanently purge a student's profile from the database. Due to strict `CASCADE` rules in our PostgreSQL schema, deleting a student instantly destroys all associated drafts, submissions, telemetry, and grades linked to that `uuid`, ensuring the "Right to be Forgotten."
-*   **Scoped Access**: Teachers are rigorously restricted by RBAC (Role-Based Access Control) to only view records associated with their generated `class_id` foreign keys.
-
-### GDPR (General Data Protection Regulation) - EU
-*   **Data Minimization**: We only collect the `email`, `username`, and `full_name` required to operate the service.
-*   **Consent**: Account creation relies on explicit opt-in.
-*   **Secure Transit**: All communication between the client, Next.js API, and Supabase travels over TLS 1.2+ (HTTPS), guaranteeing data is encrypted in transit. Data at rest is handled by Supabase's underlying cloud infrastructure provider (AWS/GCP), which provides AES-256 encryption at the volume level.
+### Cryptography & Authentication Hardening
+*   Passwords are hashed using `bcryptjs` at registration; plaintext passwords are never persisted.
+*   Login endpoints execute constant-time dummy `bcrypt` comparisons on unknown usernames to prevent timing-based account enumeration.
+*   Faculty registration (`/api/auth/register`) enforces `crypto.timingSafeEqual` verification of `TEACHER_INVITE_CODE`.
+*   Session tokens (`clio_session`) are signed with `HMAC-SHA256` and enforce `exp`, `iat`, and `jti` claims at the Edge via WebCrypto (`frontend/middleware.ts`).
 
 ---
 
-*For security vulnerability disclosures, please open an issue in the GitHub Tracker or email the repository maintainer directly.*
+## 3. Compliance Readiness (FERPA & GDPR)
+
+*   **Data Portability & Right to Erasure**: PostgreSQL foreign keys are configured with `ON DELETE CASCADE` (`migrations/000_full_schema.sql`). Deleting a student profile automatically purges all linked drafts, submissions, telemetry snapshots, class enrollments, and grades.
+*   **Row Level Security (RLS)**: All seven public tables (`profiles`, `assignments`, `classes`, `class_enrollments`, `submissions`, `grades`, `drafts`) have PostgreSQL RLS enabled with anonymous direct table privileges revoked (`migrations/002_lockdown_rls_all_tables.sql`).
+*   **Encryption in Transit & at Rest**: All client-server and server-database traffic runs over TLS 1.2+/1.3, with AES-256 volume encryption at rest managed by Supabase PostgreSQL.
+
+---
+
+*For vulnerability reporting guidelines, see [`SECURITY.md`](../SECURITY.md).*

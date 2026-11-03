@@ -1,0 +1,17 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/main/schemas/plan.schema.json",
+  "projectId": "clio",
+  "type": "frontend",
+  "name": "Layer 5: Rust Engine Endpoints & Public Health Probe",
+  "priority": "p0",
+  "targetUrl": "http://127.0.0.1:8088/health",
+  "planSteps": [
+    { "type": "action", "description": "navigate to http://127.0.0.1:8088/health" },
+    { "type": "assertion", "description": "verify 'clio-engine' is visible" },
+    { "type": "action", "description": "navigate to http://127.0.0.1:8088/metrics" },
+    { "type": "assertion", "description": "verify 'telemetry_audits_total' is visible" },
+    { "type": "action", "description": "navigate to http://localhost:3000/" },
+    { "type": "assertion", "description": "verify path '/'" },
+    { "type": "assertion", "description": "verify \"Let's Go\" is visible" }
+  ]
+}

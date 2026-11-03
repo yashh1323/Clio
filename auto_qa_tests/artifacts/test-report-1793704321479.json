@@ -1,0 +1,86 @@
+{
+  "testName": "Layer 4: Teacher Dashboard Edge Guard & Faculty Funnel",
+  "projectId": "clio",
+  "targetUrl": "http://localhost:3000/dashboard",
+  "priority": "p0",
+  "startedAt": "2026-11-03T11:11:58.328Z",
+  "status": "passed",
+  "steps": [
+    {
+      "index": 1,
+      "description": "navigate to http://localhost:3000/dashboard",
+      "type": "action",
+      "status": "passed",
+      "durationMs": 533
+    },
+    {
+      "index": 2,
+      "description": "verify path '/login'",
+      "type": "assertion",
+      "status": "passed",
+      "durationMs": 0
+    },
+    {
+      "index": 3,
+      "description": "verify 'Welcome to Clio' is visible",
+      "type": "assertion",
+      "status": "passed",
+      "durationMs": 77
+    },
+    {
+      "index": 4,
+      "description": "verify 'Login' is visible",
+      "type": "assertion",
+      "status": "passed",
+      "durationMs": 24
+    },
+    {
+      "index": 5,
+      "description": "click 'Register'",
+      "type": "action",
+      "status": "passed",
+      "durationMs": 582
+    },
+    {
+      "index": 6,
+      "description": "verify path '/register'",
+      "type": "assertion",
+      "status": "passed",
+      "durationMs": 0
+    },
+    {
+      "index": 7,
+      "description": "click 'Teacher'",
+      "type": "action",
+      "status": "passed",
+      "durationMs": 542
+    },
+    {
+      "index": 8,
+      "description": "verify 'Teacher Invite Code' is visible",
+      "type": "assertion",
+      "status": "passed",
+      "durationMs": 26
+    },
+    {
+      "index": 9,
+      "description": "click 'Back to Login'",
+      "type": "action",
+      "status": "passed",
+      "durationMs": 487
+    },
+    {
+      "index": 10,
+      "description": "verify path '/login'",
+      "type": "assertion",
+      "status": "passed",
+      "durationMs": 0
+    }
+  ],
+  "artifacts": [
+    "C:\\mini project\\clio\\auto_qa_tests\\artifacts\\run-final-1793704321351.png"
+  ],
+  "consoleErrors": [],
+  "finishedAt": "2026-11-03T11:12:01.479Z",
+  "durationMs": 3151
+}

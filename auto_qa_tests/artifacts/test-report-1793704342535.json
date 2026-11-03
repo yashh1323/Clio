@@ -1,0 +1,65 @@
+{
+  "testName": "Layer 5: Rust Engine Endpoints & Public Health Probe",
+  "projectId": "clio",
+  "targetUrl": "http://127.0.0.1:8088/health",
+  "priority": "p0",
+  "startedAt": "2026-11-03T11:12:20.344Z",
+  "status": "passed",
+  "steps": [
+    {
+      "index": 1,
+      "description": "navigate to http://127.0.0.1:8088/health",
+      "type": "action",
+      "status": "passed",
+      "durationMs": 423
+    },
+    {
+      "index": 2,
+      "description": "verify 'clio-engine' is visible",
+      "type": "assertion",
+      "status": "passed",
+      "durationMs": 36
+    },
+    {
+      "index": 3,
+      "description": "navigate to http://127.0.0.1:8088/metrics",
+      "type": "action",
+      "status": "passed",
+      "durationMs": 414
+    },
+    {
+      "index": 4,
+      "description": "verify 'telemetry_audits_total' is visible",
+      "type": "assertion",
+      "status": "passed",
+      "durationMs": 28
+    },
+    {
+      "index": 5,
+      "description": "navigate to http://localhost:3000/",
+      "type": "action",
+      "status": "passed",
+      "durationMs": 487
+    },
+    {
+      "index": 6,
+      "description": "verify path '/'",
+      "type": "assertion",
+      "status": "passed",
+      "durationMs": 0
+    },
+    {
+      "index": 7,
+      "description": "verify \"Let's Go\" is visible",
+      "type": "assertion",
+      "status": "passed",
+      "durationMs": 54
+    }
+  ],
+  "artifacts": [
+    "C:\\mini project\\clio\\auto_qa_tests\\artifacts\\run-final-1793704342420.png"
+  ],
+  "consoleErrors": [],
+  "finishedAt": "2026-11-03T11:12:22.535Z",
+  "durationMs": 2191
+}

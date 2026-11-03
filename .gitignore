@@ -18,6 +18,7 @@ __pycache__/
 .env.development
 .env.test
 .env.production
+!.env.example
 *.pem
 
 # testing and logs
@@ -39,6 +40,11 @@ build/
 large_payload.json
 test_*.json
 cookies.txt
+
+# Rust build artifacts
+target/
+engine-rust/target/
+*.exe
 
 # OS generated
 .DS_Store
