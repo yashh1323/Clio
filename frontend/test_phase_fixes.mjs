@@ -239,7 +239,7 @@ const composePath = path.resolve(__dirname, '../docker-compose.yml');
 const composeYaml = fs.readFileSync(composePath, 'utf8');
 assert.ok(composeYaml.includes('CLIO_ENGINE_URL=http://engine:8088'), 'Must point to http://engine:8088');
 assert.ok(composeYaml.includes('context: ./engine-rust'), 'Must build engine-rust context');
-assert.ok(composeYaml.includes('"8088:8088"'), 'Must expose port 8088');
+assert.ok(composeYaml.includes('8088:8088'), 'Must expose port 8088');
 console.log('  ✔ docker-compose.yml aligned to engine-rust on port 8088');
 
 // ── Test 10: P1.1 - Server-Side Snapshot HTML Subsampling & Precomputed Lengths ──

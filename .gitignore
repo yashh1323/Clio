@@ -26,6 +26,7 @@ __pycache__/
 htmlcov/
 testsprite_tests/tmp/
 .testsprite/
+auto_qa_tests/artifacts/
 *.log
 npm-debug.log*
 yarn-debug.log*

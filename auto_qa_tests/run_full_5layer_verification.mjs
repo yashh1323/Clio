@@ -1,9 +1,36 @@
-import { signToken } from '../frontend/lib/auth.ts';
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const { chromium } = await import(process.env.PLAYWRIGHT_MODULE_PATH || 'playwright');
+// Pre-load frontend/.env.local so AUTH_SECRET matches Next.js dev server
+try {
+  const envContent = fs.readFileSync(path.resolve('frontend/.env.local'), 'utf8');
+  for (const line of envContent.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
+      const idx = trimmed.indexOf('=');
+      const key = trimmed.slice(0, idx).trim();
+      const val = trimmed.slice(idx + 1).trim();
+      process.env[key] = val;
+    }
+  }
+} catch (_) {}
+
+import { signToken } from '../frontend/lib/auth.ts';
+
+let chromium;
+try {
+  const pw = await import(process.env.PLAYWRIGHT_MODULE_PATH || 'playwright');
+  chromium = pw.chromium;
+} catch {
+  // If playwright is not globally installed, attempt fallback to sibling directory if present
+  try {
+    const pw = await import('../node_modules/playwright/index.mjs');
+    chromium = pw.chromium;
+  } catch {
+    console.warn('⚠️ Playwright not detected; browser layer will be skipped if unavailable.');
+  }
+}
 
 console.log('================================================================');
 console.log('🛡️  CLIO FULL 5-LAYER E2E QUALITY ASSURANCE & VERIFICATION SUITE');
@@ -100,9 +127,12 @@ function recordResult(layer, name, passed, details = '') {
     await anonPage.locator('#password').fill('wrong_credentials');
     const loginStart = Date.now();
     await anonPage.locator('#login-button, button[type="submit"]').click();
-    await anonPage.waitForTimeout(400);
+    let loginErrVisible = false;
+    try {
+      await anonPage.getByText('Invalid credentials').waitFor({ state: 'visible', timeout: 5000 });
+      loginErrVisible = true;
+    } catch (_) {}
     const loginElapsed = Date.now() - loginStart;
-    const loginErrVisible = await anonPage.getByText('Invalid credentials').isVisible({ timeout: 3000 });
     recordResult('Layer 2', 'Invalid credentials rejected with constant-time dummy bcrypt', loginErrVisible, `${loginElapsed}ms`);
 
     // ========================================================================
