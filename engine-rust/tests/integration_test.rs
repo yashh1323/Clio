@@ -128,6 +128,7 @@ fn test_lib_direct_calls() {
             content: "Test".into(),
         }],
         threshold: Some(25),
+        containment_threshold: None,
         shingle_size: Some(4),
     });
     assert_eq!(sim_res.pairs.len(), 0);

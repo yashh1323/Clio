@@ -99,7 +99,7 @@ pub struct StudentRef {
 }
 
 /// SimilarityPair details a pair of submissions exceeding the similarity threshold.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SimilarityPair {
     /// First submission reference.
     pub submission1: StudentRef,
@@ -110,25 +110,40 @@ pub struct SimilarityPair {
     /// Count of shared n-gram shingles.
     #[serde(rename = "sharedShingles")]
     pub shared_shingles: usize,
+    /// Asymmetric containment of submission 1 inside submission 2 (0.0 - 1.0).
+    #[serde(rename = "containment1In2", default)]
+    pub containment_1_in_2: f64,
+    /// Asymmetric containment of submission 2 inside submission 1 (0.0 - 1.0).
+    #[serde(rename = "containment2In1", default)]
+    pub containment_2_in_1: f64,
+    /// Maximum containment observed (global or windowed block, 0.0 - 1.0).
+    #[serde(rename = "maxContainment", default)]
+    pub max_containment: f64,
+    /// Count of shared Winnowing fingerprints.
+    #[serde(rename = "sharedFingerprints", default)]
+    pub shared_fingerprints: usize,
     /// Assignment title.
     pub assignment: String,
 }
 
 /// AnalyzeRequest encapsulates the payload passed to the similarity engine.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct AnalyzeRequest {
     /// Submissions to compare.
     pub submissions: Vec<SubmissionInput>,
     /// Minimum similarity percentage to report (default: 25).
     #[serde(default)]
     pub threshold: Option<i32>,
+    /// Minimum asymmetric containment ratio to report (0.0 - 1.0, default: 0.20).
+    #[serde(rename = "containmentThreshold", default)]
+    pub containment_threshold: Option<f64>,
     /// Shingle n-gram size in words (default: 4).
     #[serde(rename = "shingleSize", default)]
     pub shingle_size: Option<usize>,
 }
 
 /// AnalyzeResponse delivers similarity metrics and detected pairs.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AnalyzeResponse {
     /// Detected high-similarity pairs (sorted descending, capped at 50).
     pub pairs: Vec<SimilarityPair>,
@@ -229,12 +244,15 @@ struct ProcessedSubmission {
     word_count: usize,
     shingles: HashSet<u64>,
     minhash_sig: [u64; NUM_HASHES],
+    fingerprints: Vec<crate::winnowing::Fingerprint>,
+    fingerprint_set: HashSet<u64>,
 }
 
 /// Analyzes a corpus of submissions and detects similarity pairs using MinHash and LSH.
 pub fn analyze_corpus(req: &AnalyzeRequest) -> AnalyzeResponse {
     let threshold = req.threshold.unwrap_or(25).max(1);
     let shingle_size = req.shingle_size.unwrap_or(4).max(1);
+    let effective_containment_threshold = req.containment_threshold.unwrap_or(0.20).clamp(0.01, 1.0);
 
     if req.submissions.len() < 2 {
         return AnalyzeResponse {
@@ -258,6 +276,17 @@ pub fn analyze_corpus(req: &AnalyzeRequest) -> AnalyzeResponse {
             let (shingles, shingle_keys) = generate_shingles(&words, shingle_size);
             let minhash_sig = compute_minhash_signature(&shingle_keys);
 
+            // Winnowing sequential shingles and fingerprint extraction
+            let seq_shingles = crate::winnowing::generate_sequential_shingles(
+                &words,
+                crate::winnowing::NOISE_THRESHOLD_K,
+            );
+            let fingerprints = crate::winnowing::winnow_shingle_hashes(&seq_shingles);
+            let mut fingerprint_set = HashSet::with_capacity(fingerprints.len());
+            for fp in &fingerprints {
+                fingerprint_set.insert(fp.hash);
+            }
+
             let student_name = if !s.student.is_empty() {
                 s.student.clone()
             } else if !s.username.is_empty() {
@@ -274,6 +303,8 @@ pub fn analyze_corpus(req: &AnalyzeRequest) -> AnalyzeResponse {
                 word_count,
                 shingles,
                 minhash_sig,
+                fingerprints,
+                fingerprint_set,
             }
         })
         .collect();
@@ -325,9 +356,12 @@ pub fn analyze_corpus(req: &AnalyzeRequest) -> AnalyzeResponse {
             continue;
         }
 
-        // For larger cohorts, index into LSH band buckets
+        // For larger cohorts, index into LSH band buckets AND Inverted Winnowing Fingerprint Index
         let mut buckets: HashMap<(String, usize, u64), Vec<usize>> = HashMap::new();
+        let mut inv_index = crate::winnowing::InvertedFingerprintIndex::new();
+
         for &idx in indices {
+            // Index into MinHash LSH bands
             let sig = &processed[idx].minhash_sig;
             for b in 0..NUM_BANDS {
                 let r1 = sig[b * ROWS_PER_BAND];
@@ -338,8 +372,12 @@ pub fn analyze_corpus(req: &AnalyzeRequest) -> AnalyzeResponse {
                     .or_default()
                     .push(idx);
             }
+
+            // Index into Winnowing Inverted Index
+            inv_index.insert(idx, &processed[idx].fingerprints);
         }
 
+        // Add MinHash LSH collision candidate pairs
         for members in buckets.values() {
             if members.len() < 2 {
                 continue;
@@ -356,6 +394,14 @@ pub fn analyze_corpus(req: &AnalyzeRequest) -> AnalyzeResponse {
                     }
                     candidate_pair_map.insert((idx_a, idx_b), ());
                 }
+            }
+        }
+
+        // Add Winnowing candidate pairs (sharing >= 3 fingerprints guarantees verbatim passages)
+        for (idx_a, idx_b, _) in inv_index.find_candidate_pairs(3) {
+            let pair = (idx_a.min(idx_b), idx_a.max(idx_b));
+            if processed[pair.0].id != processed[pair.1].id {
+                candidate_pair_map.insert(pair, ());
             }
         }
     }
@@ -389,7 +435,36 @@ pub fn analyze_corpus(req: &AnalyzeRequest) -> AnalyzeResponse {
                 0
             };
 
-            if similarity >= threshold {
+            // Asymmetric Broder Containment: C(A ⊆ B) & C(B ⊆ A)
+            let (c_1_in_2, c_2_in_1) = crate::winnowing::calculate_set_containment(
+                &a.fingerprint_set,
+                &b.fingerprint_set,
+            );
+            let global_containment = c_1_in_2.max(c_2_in_1);
+
+            // Localized windowed block containment to catch dense passages in large essays
+            let max_containment = if global_containment >= effective_containment_threshold {
+                global_containment
+            } else {
+                let win_1 = crate::winnowing::calculate_windowed_containment(
+                    &a.fingerprints,
+                    &b.fingerprint_set,
+                    crate::winnowing::WINDOW_BLOCK_FINGERPRINTS,
+                );
+                let win_2 = crate::winnowing::calculate_windowed_containment(
+                    &b.fingerprints,
+                    &a.fingerprint_set,
+                    crate::winnowing::WINDOW_BLOCK_FINGERPRINTS,
+                );
+                global_containment.max(win_1.max(win_2))
+            };
+
+            let shared_fingerprints = a.fingerprint_set.intersection(&b.fingerprint_set).count();
+
+            // Retain pair if Jaccard similarity OR asymmetric containment meets threshold
+            let is_match = similarity >= threshold || max_containment >= effective_containment_threshold;
+
+            if is_match {
                 Some(SimilarityPair {
                     submission1: StudentRef {
                         id: a.id.clone(),
@@ -403,6 +478,10 @@ pub fn analyze_corpus(req: &AnalyzeRequest) -> AnalyzeResponse {
                     },
                     similarity,
                     shared_shingles: intersection,
+                    containment_1_in_2: (c_1_in_2 * 1000.0).round() / 1000.0,
+                    containment_2_in_1: (c_2_in_1 * 1000.0).round() / 1000.0,
+                    max_containment: (max_containment * 1000.0).round() / 1000.0,
+                    shared_fingerprints,
                     assignment: a.assignment.clone(),
                 })
             } else {
@@ -411,11 +490,17 @@ pub fn analyze_corpus(req: &AnalyzeRequest) -> AnalyzeResponse {
         })
         .collect();
 
-    // 4. Sort descending by similarity, then shared shingles, then submission IDs
+    // 4. Sort descending by composite severity (max of Jaccard similarity or scaled containment)
+    let pair_score = |p: &SimilarityPair| -> i32 {
+        p.similarity.max((p.max_containment * 100.0).round() as i32)
+    };
+
     pairs.sort_by(|a, b| {
-        b.similarity
-            .cmp(&a.similarity)
+        pair_score(b)
+            .cmp(&pair_score(a))
+            .then_with(|| b.shared_fingerprints.cmp(&a.shared_fingerprints))
             .then_with(|| b.shared_shingles.cmp(&a.shared_shingles))
+            .then_with(|| b.similarity.cmp(&a.similarity))
             .then_with(|| a.submission1.id.cmp(&b.submission1.id))
             .then_with(|| a.submission2.id.cmp(&b.submission2.id))
     });
@@ -489,6 +574,7 @@ mod tests {
                 },
             ],
             threshold: Some(25),
+            containment_threshold: None,
             shingle_size: Some(4),
         };
 
@@ -519,6 +605,7 @@ mod tests {
                 },
             ],
             threshold: Some(25),
+            containment_threshold: None,
             shingle_size: Some(4),
         };
 
@@ -546,6 +633,7 @@ mod tests {
                 },
             ],
             threshold: Some(25),
+            containment_threshold: None,
             shingle_size: Some(4),
         };
 
@@ -577,6 +665,7 @@ mod tests {
                 },
             ],
             threshold: Some(25),
+            containment_threshold: None,
             shingle_size: Some(4),
         };
 
@@ -607,6 +696,7 @@ mod tests {
         let req = AnalyzeRequest {
             submissions: subs,
             threshold: Some(25),
+            containment_threshold: None,
             shingle_size: Some(4),
         };
 
@@ -636,6 +726,7 @@ mod tests {
                 },
             ],
             threshold: Some(25),
+            containment_threshold: None,
             shingle_size: Some(4),
         };
 
@@ -665,10 +756,72 @@ mod tests {
                 },
             ],
             threshold: Some(25),
+            containment_threshold: None,
             shingle_size: Some(4),
         };
 
         let res = analyze_corpus(&req);
         assert_eq!(res.pairs.len(), 0);
+    }
+
+    #[test]
+    fn test_analyze_needle_in_a_haystack_diluted_plagiarism() {
+        // Stolen verbatim passage of ~180 words
+        let copied_passage = "\
+            The architectural transition from monolithic database management systems to distributed event-driven microservices \
+            represents a paradigm shift in software scalability and resilience. By decoupling bounded contexts through asynchronous \
+            message brokers, modern applications achieve horizontal elasticity and operational fault isolation. \
+            However, this architectural decoupling introduces significant data consistency challenges, necessitating the adoption \
+            of eventual consistency, compensating transactions, and distributed consensus algorithms such as Raft and Paxos to \
+            maintain state integrity across network partitions. Distributed transactions cannot rely on two-phase commit across \
+            heterogeneous cloud environments due to blocking coordinator latency and network unreliability. Therefore, event sourcing \
+            and saga orchestration patterns have emerged as the standard industry practice for maintaining eventual consistency across \
+            independent relational databases and document stores.";
+
+        // Unique background filler for Essay A (~1,800 words)
+        let filler_a = (0..90)
+            .map(|i| format!("Chapter {i} explores unique early twentieth century agricultural economics and crop rotation techniques across northern European fertile plains."))
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        // Unique background filler for Essay B (~2,300 words)
+        let filler_b = (0..115)
+            .map(|i| format!("Section {i} examines distinct marine biological biodiversity and hydrothermal vent ecosystems situated within oceanic tectonic trenches."))
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        let essay_a = format!("{filler_a} {copied_passage}");
+        let essay_b = format!("{filler_b} {copied_passage}");
+
+        let req = AnalyzeRequest {
+            submissions: vec![
+                SubmissionInput {
+                    id: "essay-a".into(),
+                    assignment: "Thesis 500".into(),
+                    student: "Alice".into(),
+                    username: "alice".into(),
+                    content: essay_a,
+                },
+                SubmissionInput {
+                    id: "essay-b".into(),
+                    assignment: "Thesis 500".into(),
+                    student: "Bob".into(),
+                    username: "bob".into(),
+                    content: essay_b,
+                },
+            ],
+            threshold: Some(25), // Jaccard threshold is 25%
+            containment_threshold: Some(0.20), // Containment threshold is 20%
+            shingle_size: Some(4),
+        };
+
+        let res = analyze_corpus(&req);
+
+        // Diluted Jaccard similarity must be < 10% (would fail standard plagiarism detector)
+        assert_eq!(res.pairs.len(), 1, "Must detect the plagiarized pair despite dilution!");
+        let pair = &res.pairs[0];
+        assert!(pair.similarity < 15, "Symmetric Jaccard must be diluted (< 15%), actual: {}", pair.similarity);
+        assert!(pair.max_containment >= 0.85, "Windowed containment must detect copied passage with >= 85%, actual: {}", pair.max_containment);
+        assert!(pair.shared_fingerprints >= 10, "Must share Winnowing fingerprints, actual: {}", pair.shared_fingerprints);
     }
 }

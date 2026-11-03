@@ -13,6 +13,10 @@ export interface EngineSimilarityPair {
     submission2: { id: string; student: string; username: string }
     similarity: number
     sharedShingles: number
+    containment1In2?: number
+    containment2In1?: number
+    maxContainment?: number
+    sharedFingerprints?: number
     assignment: string
 }
 
@@ -121,7 +125,8 @@ export async function auditTelemetryWithEngine(
 export function localAnalyzeSimilarity(
     submissions: EngineSubmissionInput[],
     threshold: number = 25,
-    shingleSize: number = 4
+    shingleSize: number = 4,
+    containmentThreshold: number = 0.20
 ): SimilarityAnalysisResult {
     const N = shingleSize > 0 ? shingleSize : 4
     const validThreshold = threshold > 0 ? threshold : 25
@@ -183,12 +188,22 @@ export function localAnalyzeSimilarity(
             const union = a.shingles.size + b.shingles.size - intersection
             const similarity = union > 0 ? Math.round((intersection / union) * 100) : 0
 
-            if (similarity >= validThreshold) {
+            const aSize = a.shingles.size
+            const bSize = b.shingles.size
+            const containment1In2 = aSize > 0 ? Number((intersection / aSize).toFixed(3)) : 0
+            const containment2In1 = bSize > 0 ? Number((intersection / bSize).toFixed(3)) : 0
+            const maxContainment = Math.max(containment1In2, containment2In1)
+
+            if (similarity >= validThreshold || maxContainment >= containmentThreshold) {
                 pairs.push({
                     submission1: { id: a.id, student: a.student, username: a.username },
                     submission2: { id: b.id, student: b.student, username: b.username },
                     similarity,
                     sharedShingles: intersection,
+                    containment1In2,
+                    containment2In1,
+                    maxContainment,
+                    sharedFingerprints: intersection,
                     assignment: a.assignment,
                 })
             }
@@ -209,7 +224,9 @@ export function localAnalyzeSimilarity(
     }
 
     pairs.sort((a, b) => {
-        if (b.similarity !== a.similarity) return b.similarity - a.similarity
+        const scoreA = Math.max(a.similarity, Math.round((a.maxContainment ?? 0) * 100))
+        const scoreB = Math.max(b.similarity, Math.round((b.maxContainment ?? 0) * 100))
+        if (scoreB !== scoreA) return scoreB - scoreA
         if (b.sharedShingles !== a.sharedShingles) return b.sharedShingles - a.sharedShingles
         return a.submission1.id.localeCompare(b.submission1.id)
     })
@@ -232,7 +249,8 @@ export function localAnalyzeSimilarity(
 export async function analyzeSimilarityWithEngine(
     submissions: EngineSubmissionInput[],
     threshold: number = 25,
-    shingleSize: number = 4
+    shingleSize: number = 4,
+    containmentThreshold: number = 0.20
 ): Promise<SimilarityAnalysisResult> {
     const engineUrl = getEngineUrl()
 
@@ -247,6 +265,7 @@ export async function analyzeSimilarityWithEngine(
                 body: JSON.stringify({
                     submissions,
                     threshold,
+                    containmentThreshold,
                     shingleSize,
                 }),
                 signal: AbortSignal.timeout(5000),
@@ -265,7 +284,7 @@ export async function analyzeSimilarityWithEngine(
     }
 
     // Local TypeScript fallback
-    return localAnalyzeSimilarity(submissions, threshold, shingleSize)
+    return localAnalyzeSimilarity(submissions, threshold, shingleSize, containmentThreshold)
 }
 
 /**
