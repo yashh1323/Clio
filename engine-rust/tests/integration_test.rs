@@ -233,6 +233,8 @@ async fn test_unauthenticated_probes_and_protected_compute_routes() {
         "/api/v1/similarity/analyze",
         "/api/v1/pdf/render",
         "/api/v1/stylometry/audit",
+        "/api/v1/semantic/analyze",
+        "/api/v1/telemetry/process",
     ] {
         let res = app
             .clone()
@@ -289,5 +291,100 @@ async fn test_cors_allows_localhost_and_blocks_unknown_origins() {
             .headers()
             .get("access-control-allow-origin")
             .is_none()
+    );
+}
+
+#[tokio::test]
+async fn test_semantic_analyze_api_integration() {
+    let state = AppState::default();
+    let app = build_router(state.clone());
+
+    let payload = serde_json::json!({
+        "docA": "The Industrial Revolution marked a period of rapid technological change. Manufacturing was transformed through steam power.",
+        "docB": "The Industrial Upheaval signaled an era of quick mechanical shift. Production was altered via vapor energy.",
+        "threshold": 0.65
+    });
+
+    let res = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/semantic/analyze")
+                .header("content-type", "application/json")
+                .body(Body::from(payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), StatusCode::OK);
+    let body_bytes = axum::body::to_bytes(res.into_body(), 1024 * 1024)
+        .await
+        .unwrap();
+    let sem_res: clio_engine::SemanticAnalyzeResponse =
+        serde_json::from_slice(&body_bytes).unwrap();
+    assert_eq!(sem_res.doc_a_sentences, 2);
+    assert_eq!(sem_res.doc_b_sentences, 2);
+    assert!(sem_res.semantic_score > 0.50);
+    assert_eq!(
+        state
+            .semantic_analyzed_total
+            .load(std::sync::atomic::Ordering::Relaxed),
+        1
+    );
+}
+
+#[tokio::test]
+async fn test_telemetry_process_api_integration() {
+    let state = AppState::default();
+    let app = build_router(state.clone());
+
+    let mut events = Vec::new();
+    let mut t = 1000u64;
+    for i in 0..60 {
+        events.push(clio_engine::KeystrokeEvent {
+            timestamp: t,
+            op: if i == 20 || i == 45 {
+                clio_engine::KeystrokeOp::Delete
+            } else {
+                clio_engine::KeystrokeOp::Insert
+            },
+        });
+        t += if i % 7 == 0 {
+            650 + ((i * 43) % 350) as u64
+        } else {
+            120 + ((i * 31 + 17) % 85) as u64
+        };
+    }
+
+    let payload = serde_json::json!({
+        "events": events,
+        "sessionId": "integ-sess-456"
+    });
+
+    let res = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/telemetry/process")
+                .header("content-type", "application/json")
+                .body(Body::from(payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), StatusCode::OK);
+    let body_bytes = axum::body::to_bytes(res.into_body(), 1024 * 1024)
+        .await
+        .unwrap();
+    let proc_res: clio_engine::ProcessAuditResult = serde_json::from_slice(&body_bytes).unwrap();
+    assert!(proc_res.is_authentic);
+    assert!(proc_res.confidence_score >= 80.0);
+    assert_eq!(
+        state
+            .telemetry_processed_total
+            .load(std::sync::atomic::Ordering::Relaxed),
+        1
     );
 }

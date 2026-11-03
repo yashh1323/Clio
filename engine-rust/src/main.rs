@@ -1,5 +1,7 @@
 //! Clio High-Performance Engine Server Binary.
 
+#![forbid(unsafe_code)]
+
 use anyhow::Context;
 use clio_engine::{AppState, build_router};
 use std::net::SocketAddr;

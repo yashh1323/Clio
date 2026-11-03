@@ -8,6 +8,8 @@ import {
     auditTelemetryWithEngine,
     analyzeSimilarityWithEngine,
     auditStylometryWithEngine,
+    analyzeSemanticSimilarityWithEngine,
+    auditKeystrokeProcessWithEngine,
     checkEngineHealth,
     renderPdfWithEngine,
 } from './lib/engine.ts';
@@ -66,6 +68,31 @@ assert.strictEqual(unconfigSimilarity.pairs.length, 1, 'Should find 1 high simil
 assert.strictEqual(unconfigSimilarity.pairs[0].similarity, 100, 'Identical submissions must be 100% similar');
 assert.strictEqual(unconfigSimilarity.method, 'local_typescript', 'Method must indicate local fallback');
 console.log('  ✔ Similarity analysis gracefully falls back to TypeScript when CLIO_ENGINE_URL is unset');
+
+const docOrig = 'The Industrial Revolution marked a period of rapid technological change. Manufacturing was transformed through steam power. This shift created immense economic consequences across Europe.';
+const docPara = 'The Industrial Upheaval signaled an era of quick mechanical shift. Production was altered via vapor energy. This transition generated massive financial outcomes throughout Britain.';
+
+const unconfigSemantic = await analyzeSemanticSimilarityWithEngine(docOrig, docPara, 0.65);
+assert.strictEqual(unconfigSemantic.method, 'local_typescript', 'Semantic must indicate local fallback');
+assert.ok(unconfigSemantic.semanticScore >= 0.50, 'Semantic score must be >= 0.50 for paraphrased text');
+assert.strictEqual(unconfigSemantic.docASentences, 3);
+console.log('  ✔ Semantic paraphrase analysis gracefully falls back to TypeScript when CLIO_ENGINE_URL is unset');
+
+const humanKeystrokes = [];
+let tCursor = 1000;
+for (let i = 0; i < 60; i++) {
+    humanKeystrokes.push({
+        timestamp: tCursor,
+        op: (i === 20 || i === 45) ? 'delete' : 'insert',
+    });
+    tCursor += (i % 7 === 0) ? (650 + ((i * 43) % 350)) : (120 + ((i * 31 + 17) % 85));
+}
+
+const unconfigProcess = await auditKeystrokeProcessWithEngine(humanKeystrokes, 'sess-test-1');
+assert.strictEqual(unconfigProcess.method, 'local_typescript', 'Keystroke process must indicate local fallback');
+assert.strictEqual(unconfigProcess.isAuthentic, true, 'Authentic keystrokes must be verified in fallback');
+assert.ok(unconfigProcess.confidenceScore >= 80, 'Confidence must be >= 80');
+console.log('  ✔ Cognitive process keystroke audit gracefully falls back to TypeScript when CLIO_ENGINE_URL is unset');
 
 // ── Test 2: Graceful Fallback When Engine Unreachable ──
 console.log('\n--- Test 2: Graceful Fallback When Engine Unreachable ---');
@@ -249,6 +276,34 @@ try {
     assert.ok(liveStylometry.totalWindows >= 1, 'Total windows must be >= 1 for > 250 words');
     assert.strictEqual(liveStylometry.profile.isAnomalous, false, 'Homogeneous sample must not be flagged anomalous');
     console.log('  ✔ Live Rust engine intrinsic stylometry audit verified (Udny Yule K & Burrows Delta across sliding windows)');
+
+    // Live Engine Semantic Paraphrase Analysis
+    const liveSemantic = await analyzeSemanticSimilarityWithEngine(docOrig, docPara, 0.65);
+    assert.strictEqual(liveSemantic.method, 'engine_rust', 'Must be executed by Rust engine');
+    assert.ok(liveSemantic.semanticScore >= 0.50, 'Semantic score must be >= 0.50 in Rust engine');
+    assert.strictEqual(liveSemantic.docASentences, 3);
+    assert.ok(liveSemantic.alignedPairs.length > 0, 'Must report aligned sentence pairs in Rust engine');
+    console.log('  ✔ Live Rust engine semantic paraphrase analysis verified (PSD Centroid Projection & Sentence Bipartite Alignment)');
+
+    // Live Engine Cognitive Keystroke Process Telemetry Audit
+    const liveProcess = await auditKeystrokeProcessWithEngine(humanKeystrokes, 'sess-live-1');
+    assert.strictEqual(liveProcess.method, 'engine_rust', 'Must be executed by Rust engine');
+    assert.strictEqual(liveProcess.isAuthentic, true, 'Authentic typing must pass audit in Rust engine');
+    assert.ok(liveProcess.confidenceScore >= 80, 'Confidence score must be >= 80 in Rust engine');
+    console.log('  ✔ Live Rust engine cognitive process audit verified (Two-component IKI Log-Normal mixture & P/R bursts)');
+
+    // Live Engine Macro Bot Shield Detection
+    const botKeystrokes = [];
+    let tBot = 1000;
+    for (let i = 0; i < 50; i++) {
+        botKeystrokes.push({ timestamp: tBot, op: 'insert' });
+        tBot += 5; // 5ms intervals (rapid macro injector)
+    }
+    const liveBotAudit = await auditKeystrokeProcessWithEngine(botKeystrokes, 'sess-bot-1');
+    assert.strictEqual(liveBotAudit.method, 'engine_rust', 'Must be executed by Rust engine');
+    assert.strictEqual(liveBotAudit.isAuthentic, false, 'Rapid bot macro must be rejected');
+    assert.ok(liveBotAudit.flags.some(f => f.includes('<20ms intervals')), 'Must flag <20ms rapid intervals');
+    console.log('  ✔ Live Rust engine automated bot shield verified (detected rapid <20ms interval injection)');
 
 } finally {
     engineProcess.kill();

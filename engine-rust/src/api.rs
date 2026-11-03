@@ -40,6 +40,10 @@ pub struct AppState {
     pub pdf_renders_total: Arc<AtomicU64>,
     /// Total count of stylometry audits processed.
     pub stylometry_audits_total: Arc<AtomicU64>,
+    /// Total count of semantic paraphrase analyze requests processed.
+    pub semantic_analyzed_total: Arc<AtomicU64>,
+    /// Total count of advanced cognitive keystroke telemetry audits processed.
+    pub telemetry_processed_total: Arc<AtomicU64>,
     /// Optional pre-shared key required for all requests when configured.
     pub engine_key: Option<String>,
 }
@@ -57,6 +61,8 @@ impl Default for AppState {
             similarity_runs_total: Arc::new(AtomicU64::new(0)),
             pdf_renders_total: Arc::new(AtomicU64::new(0)),
             stylometry_audits_total: Arc::new(AtomicU64::new(0)),
+            semantic_analyzed_total: Arc::new(AtomicU64::new(0)),
+            telemetry_processed_total: Arc::new(AtomicU64::new(0)),
             engine_key,
         }
     }
@@ -107,6 +113,8 @@ struct MetricsResponse {
     similarity_runs_total: u64,
     pdf_renders_total: u64,
     stylometry_audits_total: u64,
+    semantic_analyzed_total: u64,
+    telemetry_processed_total: u64,
     uptime_seconds: f64,
 }
 
@@ -129,6 +137,8 @@ async fn metrics_handler(State(state): State<AppState>) -> Json<MetricsResponse>
         similarity_runs_total: state.similarity_runs_total.load(Ordering::Relaxed),
         pdf_renders_total: state.pdf_renders_total.load(Ordering::Relaxed),
         stylometry_audits_total: state.stylometry_audits_total.load(Ordering::Relaxed),
+        semantic_analyzed_total: state.semantic_analyzed_total.load(Ordering::Relaxed),
+        telemetry_processed_total: state.telemetry_processed_total.load(Ordering::Relaxed),
         uptime_seconds: uptime,
     })
 }
@@ -288,6 +298,71 @@ async fn audit_stylometry_handler(
     Ok(Json(result))
 }
 
+/// Handler for `POST /api/v1/semantic/analyze`.
+/// Uses tokio::task::spawn_blocking to isolate CPU-intensive semantic projection and caps content to 1MB.
+async fn semantic_analyze_handler(
+    State(state): State<AppState>,
+    ValidatedJson(req): ValidatedJson<crate::semantic::SemanticAnalyzeRequest>,
+) -> Result<Json<crate::semantic::SemanticAnalyzeResponse>, (StatusCode, Json<serde_json::Value>)> {
+    if req.doc_a.len() > 1_000_000 || req.doc_b.len() > 1_000_000 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": "Document content exceeds 1MB limit" })),
+        ));
+    }
+
+    state
+        .semantic_analyzed_total
+        .fetch_add(1, Ordering::Relaxed);
+    let result =
+        tokio::task::spawn_blocking(move || crate::semantic::analyze_semantic_similarity(&req))
+            .await
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({ "error": format!("Worker task failed: {e}") })),
+                )
+            })?;
+
+    Ok(Json(result))
+}
+
+/// Handler for `POST /api/v1/telemetry/process`.
+/// Uses tokio::task::spawn_blocking to isolate keystroke stream evaluation and caps events to <= 50,000.
+async fn telemetry_process_handler(
+    State(state): State<AppState>,
+    ValidatedJson(req): ValidatedJson<crate::telemetry_advanced::ProcessAuditRequest>,
+) -> Result<
+    Json<crate::telemetry_advanced::ProcessAuditResult>,
+    (StatusCode, Json<serde_json::Value>),
+> {
+    if req.events.len() > 50_000 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(
+                serde_json::json!({ "error": "Keystroke events count exceeds maximum limit of 50,000" }),
+            ),
+        ));
+    }
+
+    state
+        .telemetry_processed_total
+        .fetch_add(1, Ordering::Relaxed);
+    let events = req.events;
+    let result = tokio::task::spawn_blocking(move || {
+        crate::telemetry_advanced::audit_keystroke_process(&events)
+    })
+    .await
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": format!("Worker task failed: {e}") })),
+        )
+    })?;
+
+    Ok(Json(result))
+}
+
 /// Builds a restricted CORS layer allowing localhost:3000, 127.0.0.1:3000, or custom origins.
 fn build_cors_layer_with_origin(custom_origin: Option<&str>) -> CorsLayer {
     let mut origins = vec![
@@ -334,6 +409,14 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/api/v1/stylometry/audit",
             post(audit_stylometry_handler).layer(DefaultBodyLimit::max(1024 * 1024)),
+        )
+        .route(
+            "/api/v1/semantic/analyze",
+            post(semantic_analyze_handler).layer(DefaultBodyLimit::max(1024 * 1024)),
+        )
+        .route(
+            "/api/v1/telemetry/process",
+            post(telemetry_process_handler).layer(DefaultBodyLimit::max(2 * 1024 * 1024)),
         )
         .route_layer(from_fn_with_state(state.clone(), validate_engine_key));
 
@@ -644,5 +727,68 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(state.stylometry_audits_total.load(Ordering::Relaxed), 1);
+    }
+
+    #[tokio::test]
+    async fn test_semantic_analyze_endpoint() {
+        let state = AppState::default();
+        let app = build_router(state.clone());
+
+        let payload = serde_json::json!({
+            "docA": "The Industrial Revolution marked a period of rapid technological change.",
+            "docB": "The Industrial Upheaval signaled an era of quick mechanical shift.",
+            "threshold": 0.70
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/semantic/analyze")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_vec(&payload).unwrap()))
+                    .expect("valid request"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(state.semantic_analyzed_total.load(Ordering::Relaxed), 1);
+    }
+
+    #[tokio::test]
+    async fn test_telemetry_process_endpoint() {
+        let state = AppState::default();
+        let app = build_router(state.clone());
+
+        let mut events = Vec::new();
+        let mut t = 1000u64;
+        for i in 0..40 {
+            events.push(serde_json::json!({
+                "timestamp": t,
+                "op": if i % 15 == 0 { "delete" } else { "insert" }
+            }));
+            t += if i % 8 == 0 { 600 } else { 150 };
+        }
+
+        let payload = serde_json::json!({
+            "events": events,
+            "sessionId": "sess-test-123"
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/telemetry/process")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_vec(&payload).unwrap()))
+                    .expect("valid request"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(state.telemetry_processed_total.load(Ordering::Relaxed), 1);
     }
 }
