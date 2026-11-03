@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="./assets/demo-screenshot.png" alt="Clio — Proof-of-Write Academic Authorship & Telemetry Platform" width="100%" />
+  <img src="./assets/demo-video.gif" alt="Clio — Working Session Replay & Authorship Intelligence Demo" width="100%" />
 
   <h1>Clio</h1>
   <p><strong>Proof-of-Write Academic Authorship, Keystroke Telemetry &amp; Multimodal Plagiarism Intelligence</strong></p>
@@ -163,9 +163,9 @@ flowchart LR
         PG[("7 Tables Protected by Row Level Security (RLS)")]
     end
 
-    TEL_CLIENT ==>|HttpOnly JWT Cookie| MW
-    STRANGLER ==>|X-Clio-Engine-Key (127.0.0.1:8088)| AX
-    API ==>|Service Role Key| PG
+    TEL_CLIENT -->|JWT Cookie| MW
+    STRANGLER -->|Engine Key / Port 8088| AX
+    API -->|Service Role Key| PG
 ```
 
 ---
@@ -192,6 +192,11 @@ flowchart LR
 - **Instant Export**: Export clean documents directly to native PDF or DOCX.
 
 ### 👨‍🏫 Teacher Assessment Suite (`/dashboard`, `/similarity`, `/assignments`, `/classes`)
+
+<div align="center">
+  <img src="./assets/demo-screenshot.png" alt="Clio Teacher Assessment Dashboard & Similarity Matrix" width="100%" />
+</div>
+
 - **Interactive Session Replay**: Scrub through a student's drafting timeline with time-compressed playback (`>5s` idle pauses compressed to `1s`).
 - **Cohort Similarity Matrix**: Inspect pairwise containment and MinHash similarity across entire classrooms.
 - **Stylometric & Telemetry Insights**: Visualize Burrows' Delta anomaly charts and IKI typing rhythm distributions.
