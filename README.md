@@ -214,6 +214,17 @@ flowchart LR
 Experience the interactive application deployed on Vercel:  
 👉 **[https://clio-three.vercel.app](https://clio-three.vercel.app)**
 
+### 🔑 Demo Accounts (Instant Test Logins)
+
+Log in immediately on the **[Login Page](https://clio-three.vercel.app/login)** using the following pre-configured mock credentials:
+
+| Role | Username | Password | Access Capabilities |
+| :--- | :--- | :--- | :--- |
+| 👨‍🏫 **Teacher / Faculty** | `teacher` | `ClioTeacher2026!` | Class Management, Session Replay, Cohort Similarity Matrix, Rubric Grading |
+| 🎓 **Student** | `student` | `ClioStudent2026!` | TipTap ProseMirror Studio, Live Cadence Telemetry, Draft Autosave, Submissions |
+
+> **Faculty Registration Gate:** To register a *new* faculty account on the [`/register`](https://clio-three.vercel.app/register) page, enter the faculty invite code: **`CLIO-FACULTY-2026`**. Student registration is open and does not require an invite code.
+
 * **Student Studio (`/editor`)**: Try drafting in the TipTap ProseMirror studio with live typing cadence tracking.
 * **Student Dashboard (`/student-dashboard`)**: View session drafts, submission status, and feedback.
 * **Teacher Dashboard (`/dashboard`)**: Inspect class submissions, scrub session replays, and review similarity matrices.

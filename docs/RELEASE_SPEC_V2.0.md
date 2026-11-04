@@ -303,7 +303,9 @@ git push origin v2.0.0
 ```markdown
 # Clio v2.0.0: Multimodal Authorship Intelligence & Pure-Rust Engine
 
-🌐 **Live Web Platform:** [https://clio-three.vercel.app](https://clio-three.vercel.app)
+🌐 **Live Web Platform:** [https://clio-three.vercel.app](https://clio-three.vercel.app)  
+🔑 **Demo Accounts:** Teacher: `teacher` / `ClioTeacher2026!` | Student: `student` / `ClioStudent2026!`  
+🏛️ **Faculty Invite Code:** `CLIO-FACULTY-2026` (for registering new teacher accounts)
 
 We are thrilled to announce **Clio v2.0.0**, a milestone release transforming academic integrity from simple string matching into a multidimensional, cognitive-aware authorship intelligence platform.
 
