@@ -3,6 +3,7 @@
 **Release Version:** `v2.0.0`  
 **Target Branch:** `main`  
 **Remote:** `origin` (`https://github.com/yashh1323/Clio.git`)  
+**Live Vercel Deployment:** [`https://clio-three.vercel.app`](https://clio-three.vercel.app)  
 **Architecture:** Pure-Rust Microservice Engine (`engine-rust`) + Next.js App Router (`frontend`) + Supabase PostgreSQL  
 **Engine Invariants:** `#![forbid(unsafe_code)]`, zero external network calls (sandboxed-source-and-local-only), constant-time cryptographic verification  
 **Goldfish Audit Status:** **PASS / VERIFIED** (Technical Quality & Implementation Readiness Audited)
@@ -301,6 +302,8 @@ git push origin v2.0.0
 
 ```markdown
 # Clio v2.0.0: Multimodal Authorship Intelligence & Pure-Rust Engine
+
+🌐 **Live Web Platform:** [https://clio-three.vercel.app](https://clio-three.vercel.app)
 
 We are thrilled to announce **Clio v2.0.0**, a milestone release transforming academic integrity from simple string matching into a multidimensional, cognitive-aware authorship intelligence platform.
 

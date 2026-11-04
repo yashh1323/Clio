@@ -8,6 +8,7 @@
 
 <div align="center">
 
+[![Live Demo](https://img.shields.io/badge/Live_App-clio--three.vercel.app-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://clio-three.vercel.app)
 [![Rust Engine](https://img.shields.io/badge/Rust_Engine-Axum_%2B_Rayon-DEA584?style=for-the-badge&logo=rust&logoColor=black)](./engine-rust)
 [![Next.js 16](https://img.shields.io/badge/Next.js-16.0-black?style=for-the-badge&logo=next.js)](./frontend)
 [![Supabase PostgreSQL](https://img.shields.io/badge/Supabase-PostgreSQL_%2B_RLS-3ECF8E?style=for-the-badge&logo=supabase)](./migrations)
@@ -16,7 +17,7 @@
 [![Release](https://img.shields.io/badge/Release-v2.0.0-blueviolet?style=for-the-badge)](./docs/RELEASE_SPEC_V2.0.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](./LICENSE)
 
-[**Release v2.0 Scientific Ledger**](docs/RELEASE_SPEC_V2.0.md) · [**System Architecture**](docs/architecture.md) · [**QA Verification Ledger**](docs/clio_system_qa_documentation.md) · [**Security & Compliance**](docs/security_and_compliance.md)
+🌐 [**Live Demo Platform**](https://clio-three.vercel.app) · 📖 [**Release v2.0 Scientific Ledger**](docs/RELEASE_SPEC_V2.0.md) · 🏛️ [**System Architecture**](docs/architecture.md) · 🧪 [**QA Verification Ledger**](docs/clio_system_qa_documentation.md) · 🛡️ [**Security & Compliance**](docs/security_and_compliance.md)
 
 </div>
 
@@ -205,6 +206,17 @@ flowchart LR
 ### 🛡️ System Administrator (`/admin`, `/api/admin/users`, `/api/admin/submissions`)
 - **Directory Management**: Supervise faculty and student accounts with fail-closed invite code enforcement.
 - **Global Metrics**: Live atomic telemetry inspection (`/health`, `/metrics`) monitoring Rust engine throughput and error rates.
+
+---
+
+## 🌐 Live Cloud Deployment
+
+Experience the interactive application deployed on Vercel:  
+👉 **[https://clio-three.vercel.app](https://clio-three.vercel.app)**
+
+* **Student Studio (`/editor`)**: Try drafting in the TipTap ProseMirror studio with live typing cadence tracking.
+* **Student Dashboard (`/student-dashboard`)**: View session drafts, submission status, and feedback.
+* **Teacher Dashboard (`/dashboard`)**: Inspect class submissions, scrub session replays, and review similarity matrices.
 
 ---
 
