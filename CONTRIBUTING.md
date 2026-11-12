@@ -91,3 +91,4 @@ npm test
 - **Frontend (`frontend/`)**: TypeScript + Next.js 16 App Router. Run `npm run lint` and `npm test` before committing.
 - **Rust Engine (`engine-rust/`)**: Idiomatic Rust (2024 edition). Format with `cargo fmt` and verify zero warnings with `cargo clippy --all-targets -- -D warnings`.
 - **Commits**: Follow Conventional Commits format (e.g., `feat(engine): add LSH candidate bucket pruning`, `fix(auth): enforce constant-time invite check`).
+- **Co-Authorship & Pairing**: For collaborative contributions or pair-programming sessions, attribute co-authors using standard Git trailers (`Co-authored-by: Collaborator <email@domain.com>`).
