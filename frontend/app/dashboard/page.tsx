@@ -1,5 +1,6 @@
 "use client"
 
+import { signOut } from "@/lib/logout"
 import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabase"
@@ -247,7 +248,7 @@ export default function DashboardPage() {
 
     // ── Logout ──
     const handleLogout = async () => {
-        await fetch("/api/auth/logout", { method: "POST" })
+        if (!await signOut()) return
         router.push("/login")
     }
 

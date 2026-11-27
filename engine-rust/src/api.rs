@@ -386,11 +386,8 @@ fn build_cors_layer_with_origin(custom_origin: Option<&str>) -> CorsLayer {
         HeaderValue::from_static("http://127.0.0.1:3000"),
     ];
     if let Some(custom) = custom_origin {
-        for part in custom.split(',') {
-            let trimmed = part.trim();
-            if !trimmed.is_empty()
-                && let Ok(val) = HeaderValue::from_str(trimmed)
-            {
+        for origin in custom.split(',').map(str::trim).filter(|s| !s.is_empty()) {
+            if let Ok(val) = HeaderValue::from_str(origin) {
                 origins.push(val);
             }
         }

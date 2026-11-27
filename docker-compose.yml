@@ -1,34 +1,26 @@
-version: '3.8'
-
 services:
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?Set the Supabase URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:?Set the public anon key}
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
+    env_file: ./frontend/.env.local
     environment:
-      - NODE_ENV=development
-      - CLIO_ENGINE_URL=http://engine:8088
-      - CLIO_ENGINE_KEY=${CLIO_ENGINE_KEY:-clio-engine-dev-secret-key-2026}
-      # Note: Contributors must provide their own .env.local 
-      # or you can load them automatically if .env is present
-    env_file:
-      - path: ./frontend/.env.local
-        required: false
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-      - /app/.next
+      NODE_ENV: production
+      AUTH_SECRET: ${AUTH_SECRET:?Set a random AUTH_SECRET in frontend/.env.local}
+      CLIO_ENGINE_URL: http://engine:8088
+      CLIO_ENGINE_KEY: ${CLIO_ENGINE_KEY:?Set a shared CLIO_ENGINE_KEY in frontend/.env.local}
 
   engine:
     build:
       context: ./engine-rust
-      dockerfile: Dockerfile
     ports:
       - "127.0.0.1:8088:8088"
     environment:
-      - PORT=8088
-      - CLIO_ENGINE_HOST=0.0.0.0
-      - CLIO_ENGINE_KEY=${CLIO_ENGINE_KEY:-clio-engine-dev-secret-key-2026}
-
+      PORT: 8088
+      CLIO_ENGINE_HOST: 0.0.0.0
+      CLIO_ENGINE_REQUIRE_KEY: "true"
+      CLIO_ENGINE_KEY: ${CLIO_ENGINE_KEY:?Set a shared CLIO_ENGINE_KEY in frontend/.env.local}

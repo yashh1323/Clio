@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createSupabaseAdmin } from "@/lib/supabase"
-import { verifyToken } from "@/lib/auth"
+import { verifySessionToken } from "@/lib/auth"
 import sanitizeHtml from "sanitize-html"
 
 // ── GET /api/classes — List classes ──
@@ -9,7 +9,7 @@ import sanitizeHtml from "sanitize-html"
 export async function GET(req: NextRequest) {
     const token = req.cookies.get("clio_session")?.value
     if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    const session = verifyToken(token)
+    const session = await verifySessionToken(token)
     if (!session) return NextResponse.json({ error: "Invalid session" }, { status: 401 })
 
     const supabase = createSupabaseAdmin()
@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     const { data: profile, error: profileErr } = await supabase
         .from("profiles")
         .select("id")
-        .eq("username", session.username)
+        .eq("id", session.sub)
         .single()
 
     if (profileErr) return NextResponse.json({ error: profileErr.message }, { status: 500 })
@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
     const token = req.cookies.get("clio_session")?.value
     if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    const session = verifyToken(token)
+    const session = await verifySessionToken(token)
     if (!session || session.role !== "teacher") {
         return NextResponse.json({ error: "Forbidden: teachers only" }, { status: 403 })
     }
@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
         const { data: profile, error: profileErr } = await supabase
             .from("profiles")
             .select("id")
-            .eq("username", session.username)
+            .eq("id", session.sub)
             .single()
 
         if (profileErr) return NextResponse.json({ error: profileErr.message }, { status: 500 })
@@ -130,7 +130,7 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
     const token = req.cookies.get("clio_session")?.value
     if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    const session = verifyToken(token)
+    const session = await verifySessionToken(token)
     if (!session || session.role !== "teacher") {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
@@ -143,7 +143,7 @@ export async function DELETE(req: NextRequest) {
     const { data: profile, error: profileErr } = await supabase
         .from("profiles")
         .select("id")
-        .eq("username", session.username)
+        .eq("id", session.sub)
         .single()
 
     if (profileErr) return NextResponse.json({ error: profileErr.message }, { status: 500 })

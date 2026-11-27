@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createSupabaseAdmin } from "@/lib/supabase"
-import { verifyToken } from "@/lib/auth"
+import { verifySessionToken } from "@/lib/auth"
 
 export const runtime = 'nodejs'
 
@@ -14,7 +14,7 @@ export async function GET(
     // Verify session
     const token = req.cookies.get("clio_session")?.value
     if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    const session = verifyToken(token)
+    const session = await verifySessionToken(token)
     if (!session) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
@@ -24,7 +24,7 @@ export async function GET(
     const { data: profile } = await supabase
         .from("profiles")
         .select("id")
-        .eq("username", session.username)
+        .eq("id", session.sub)
         .single()
 
     if (!profile) {

@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { verifyToken } from '@/lib/auth'
+import { verifySessionToken } from '@/lib/auth'
 
 export async function POST(req: NextRequest) {
   // Auth check — only logged-in users can exchange Spotify tokens
@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
   if (!token) {
     return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } })
   }
-  const session = verifyToken(token)
+  const session = await verifySessionToken(token)
   if (!session) {
     return new Response(JSON.stringify({ error: 'invalid_session' }), { status: 401, headers: { 'Content-Type': 'application/json' } })
   }

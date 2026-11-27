@@ -2,7 +2,7 @@ import mammoth from 'mammoth'
 import puppeteer from 'puppeteer'
 import sanitizeHtml from 'sanitize-html'
 import { NextRequest, NextResponse } from 'next/server'
-import { verifyToken } from '@/lib/auth'
+import { verifySessionToken } from '@/lib/auth'
 import { renderPdfWithEngine } from '@/lib/engine'
 
 export const runtime = 'nodejs'
@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
   if (!token) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
-  const session = verifyToken(token)
+  const session = await verifySessionToken(token)
   if (!session) {
     return NextResponse.json({ error: 'Invalid session' }, { status: 401 })
   }

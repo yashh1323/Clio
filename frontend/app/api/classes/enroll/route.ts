@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createSupabaseAdmin } from "@/lib/supabase"
-import { verifyToken } from "@/lib/auth"
+import { verifySessionToken } from "@/lib/auth"
 
 // ── POST /api/classes/enroll — Teacher enrolls students into a class ──
 // Body: { class_id: string, student_usernames: string[] }
 export async function POST(req: NextRequest) {
     const token = req.cookies.get("clio_session")?.value
     if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    const session = verifyToken(token)
+    const session = await verifySessionToken(token)
     if (!session || session.role !== "teacher") {
         return NextResponse.json({ error: "Forbidden: teachers only" }, { status: 403 })
     }
@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
 
         // Parallelize: profile lookup + student lookup (both independent)
         const [{ data: teacherProfile }, { data: students }] = await Promise.all([
-            supabase.from("profiles").select("id").eq("username", session.username).single(),
+            supabase.from("profiles").select("id").eq("id", session.sub).single(),
             supabase.from("profiles").select("id, username").eq("role", "student").in("username", student_usernames),
         ])
 
@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
     const token = req.cookies.get("clio_session")?.value
     if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    const session = verifyToken(token)
+    const session = await verifySessionToken(token)
     if (!session || session.role !== "teacher") {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
@@ -86,7 +86,7 @@ export async function GET(req: NextRequest) {
     const { data: teacherProfile } = await supabase
         .from("profiles")
         .select("id")
-        .eq("username", session.username)
+        .eq("id", session.sub)
         .single()
 
     if (!teacherProfile) return NextResponse.json({ error: "Profile not found" }, { status: 404 })
@@ -133,7 +133,7 @@ export async function GET(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
     const token = req.cookies.get("clio_session")?.value
     if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    const session = verifyToken(token)
+    const session = await verifySessionToken(token)
     if (!session || session.role !== "teacher") {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
@@ -145,7 +145,7 @@ export async function DELETE(req: NextRequest) {
 
     // Parallelize: profile lookup + enrollment lookup (independent)
     const [{ data: teacherProfile }, { data: enrollment }] = await Promise.all([
-        supabase.from("profiles").select("id").eq("username", session.username).single(),
+        supabase.from("profiles").select("id").eq("id", session.sub).single(),
         supabase.from("class_enrollments").select("id, class_id").eq("id", enrollmentId).single(),
     ])
 

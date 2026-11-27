@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 
 // ── Role-Based Route Protection Middleware ──
-// Centralizes authentication + role checking so individual API routes
-// don't need to repeat boilerplate session verification.
+// Edge signature checks are only an early rejection. Every private API handler
+// must also validate the current database session before authorizing access.
 
 // Routes that require authentication (and their allowed roles)
 const PROTECTED_ROUTES: { pattern: RegExp; roles: string[] }[] = [
@@ -64,8 +64,8 @@ function base64UrlDecode(str: string) {
 }
 
 async function verifyTokenSignature(token: string): Promise<string | null> {
-    const secretStr = process.env.AUTH_SECRET || (process.env.NODE_ENV !== "production" ? "clio-dev-secret-DO-NOT-USE-IN-PROD" : "")
-    if (!secretStr) return null
+    const secretStr = process.env.AUTH_SECRET
+    if (!secretStr || secretStr.trim().length < 32 || secretStr.startsWith("replace_with_")) return null
 
     const parts = token.split(".")
     if (parts.length !== 2) return null
@@ -93,7 +93,9 @@ async function verifyTokenSignature(token: string): Promise<string | null> {
         if (payload && typeof payload.role === "string" && payload.role.length > 0) {
             // Strictly check cryptographic expiration claim at the edge
             const now = Math.floor(Date.now() / 1000)
-            if (typeof payload.exp !== "number" || payload.exp <= now) {
+            if (typeof payload.exp !== "number" || !Number.isFinite(payload.exp) || payload.exp <= now ||
+                typeof payload.sub !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload.sub) ||
+                !Number.isSafeInteger(payload.session_version) || payload.session_version < 0) {
                 return null // Expired session fails closed at the edge
             }
             return payload.role.trim().toLowerCase()
@@ -140,17 +142,9 @@ export async function middleware(req: NextRequest) {
         }
     }
 
-    // Add caching headers for static-ish data
     const res = NextResponse.next()
-
-    // Cache teacher list (doesn't change often) - only on safe methods
-    if (/^\/api\/teachers/.test(pathname) && (req.method === "GET" || req.method === "HEAD")) {
-        res.headers.set("Cache-Control", "private, max-age=300, stale-while-revalidate=600")
-    }
-    // Cache assignment list (changes infrequently)
-    if (/^\/api\/assignments/.test(pathname) && req.method === "GET") {
-        res.headers.set("Cache-Control", "private, max-age=60, stale-while-revalidate=120")
-    }
+    // Cached API responses must not bypass account revocation or role/status revalidation.
+    if (pathname.startsWith("/api/")) res.headers.set("Cache-Control", "no-store")
 
     return res
 }

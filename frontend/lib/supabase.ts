@@ -9,12 +9,11 @@ export const supabase = createClient<any>(supabaseUrl, anonKey)
 
 // Separate admin client factory uses the SERVICE ROLE key (bypasses RLS for secure server operations)
 export const createSupabaseAdmin = () => {
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || anonKey
-    if (process.env.NODE_ENV === "production" && !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-        console.warn("[Clio Security Warning] SUPABASE_SERVICE_ROLE_KEY is missing in production environment. Admin queries will fall back to anon key and may fail RLS policies.")
-    }
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    const serverUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
+    if (!serviceKey || !serverUrl) throw new Error("Server database credentials are missing")
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return createClient<any>(supabaseUrl, serviceKey, {
+    return createClient<any>(serverUrl, serviceKey, {
         auth: {
             persistSession: false,
             autoRefreshToken: false,

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createSupabaseAdmin } from "@/lib/supabase"
-import { verifyToken } from "@/lib/auth"
+import { verifySessionToken } from "@/lib/auth"
 
 // ── GET /api/notifications — Unread grade notifications for a student ──
 // Returns recently graded submissions that the student hasn't dismissed.
@@ -8,7 +8,7 @@ import { verifyToken } from "@/lib/auth"
 export async function GET(req: NextRequest) {
     const token = req.cookies.get("clio_session")?.value
     if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    const session = verifyToken(token)
+    const session = await verifySessionToken(token)
     if (!session || session.role !== "student") {
         return NextResponse.json({ error: "Forbidden: students only" }, { status: 403 })
     }
@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
     const { data: profile, error: profileErr } = await supabase
         .from("profiles")
         .select("id, last_seen_notifications")
-        .eq("username", session.username)
+        .eq("id", session.sub)
         .single()
 
     if (profileErr || !profile) {
@@ -70,7 +70,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
     const token = req.cookies.get("clio_session")?.value
     if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    const session = verifyToken(token)
+    const session = await verifySessionToken(token)
     if (!session || session.role !== "student") {
         return NextResponse.json({ error: "Forbidden: students only" }, { status: 403 })
     }
@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
     const { data, error } = await supabase
         .from("profiles")
         .update({ last_seen_notifications: new Date().toISOString() })
-        .eq("username", session.username)
+        .eq("id", session.sub)
         .select("id")
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })

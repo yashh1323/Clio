@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createSupabaseAdmin } from "@/lib/supabase"
-import { verifyToken } from "@/lib/auth"
+import { verifySessionToken } from "@/lib/auth"
 
 export async function GET(req: NextRequest) {
     const token = req.cookies.get("clio_session")?.value
     if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     // Only admins can access this route
-    const session = verifyToken(token)
+    const session = await verifySessionToken(token)
     if (!session || session.role !== "admin") {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
@@ -48,7 +48,7 @@ export async function DELETE(req: NextRequest) {
     const token = req.cookies.get("clio_session")?.value
     if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    const session = verifyToken(token)
+    const session = await verifySessionToken(token)
     if (!session || session.role !== "admin") {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }

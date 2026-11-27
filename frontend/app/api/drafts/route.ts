@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createSupabaseAdmin } from "@/lib/supabase"
-import { verifyToken } from "@/lib/auth"
+import { verifySessionToken } from "@/lib/auth"
 
 // ── GET /api/drafts — List student's drafts or get single draft by ID ──
 export async function GET(req: NextRequest) {
     const token = req.cookies.get("clio_session")?.value
     if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    const session = verifyToken(token)
+    const session = await verifySessionToken(token)
     if (!session || session.role !== "student") {
         return NextResponse.json({ error: "Forbidden: students only" }, { status: 403 })
     }
@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     const { data: profile } = await supabase
         .from("profiles")
         .select("id")
-        .eq("username", session.username)
+        .eq("id", session.sub)
         .single()
 
     if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 404 })
@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
     const token = req.cookies.get("clio_session")?.value
     if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    const session = verifyToken(token)
+    const session = await verifySessionToken(token)
     if (!session || session.role !== "student") {
         return NextResponse.json({ error: "Forbidden: students only" }, { status: 403 })
     }
@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
         const { data: profile } = await supabase
             .from("profiles")
             .select("id")
-            .eq("username", session.username)
+            .eq("id", session.sub)
             .single()
 
         if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 404 })
@@ -133,7 +133,7 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
     const token = req.cookies.get("clio_session")?.value
     if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    const session = verifyToken(token)
+    const session = await verifySessionToken(token)
     if (!session || session.role !== "student") {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
@@ -146,7 +146,7 @@ export async function DELETE(req: NextRequest) {
     const { data: profile } = await supabase
         .from("profiles")
         .select("id")
-        .eq("username", session.username)
+        .eq("id", session.sub)
         .single()
 
     if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 404 })

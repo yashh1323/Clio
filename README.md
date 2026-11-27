@@ -257,17 +257,17 @@ NEXT_PUBLIC_SUPABASE_URL=https://<your-project-id>.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<your-supabase-anon-key>
 SUPABASE_SERVICE_ROLE_KEY=<your-supabase-service-role-key>
 
-# Required in Production: Auth & Faculty Registration Gate
+# Generate independent random keys with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 AUTH_SECRET=replace_with_64_char_random_hex_secret
-TEACHER_INVITE_CODE=CLIO-FACULTY-2026
+TEACHER_INVITE_CODE=<private-faculty-invite-code>
 
 # Optional: Pure Rust Microservice Engine (defaults to TypeScript fallback if offline)
 CLIO_ENGINE_URL=http://127.0.0.1:8088
-CLIO_ENGINE_KEY=clio-engine-dev-secret-key-2026
+CLIO_ENGINE_KEY=<independent-random-engine-key>
 ```
 
 ### 3. Initialize Database Schema
-Run [`migrations/000_full_schema.sql`](migrations/000_full_schema.sql) in your Supabase SQL Editor. This provisions all 7 RLS-enabled tables and 10 performance indexes.
+On a new Supabase database, run the SQL files in [migrations](migrations) once in numeric order, from 000 through 003. On an existing installation, apply the outstanding migrations before updating the application. Migration 003 enables session revocation and transactional grading. Existing users sign in again after upgrading. Signing out ends all sessions for the account.
 
 ### 4. Run Clio
 
@@ -289,7 +289,7 @@ npm run dev
 
 **Option C — Docker Compose (Loopback Isolated):**
 ```bash
-docker compose up --build
+docker compose --env-file frontend/.env.local up --build
 ```
 
 ---

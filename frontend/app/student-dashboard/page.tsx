@@ -1,5 +1,6 @@
 "use client"
 
+import { signOut } from "@/lib/logout"
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import {
@@ -122,7 +123,7 @@ export default function StudentDashboard() {
     }
 
     const handleLogout = async () => {
-        try { await fetch("/api/auth/logout", { method: "POST", credentials: "include" }) } catch { }
+        if (!await signOut()) return
         router.push("/login")
     }
 

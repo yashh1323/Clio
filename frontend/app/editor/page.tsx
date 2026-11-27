@@ -1,5 +1,6 @@
 "use client"
 
+import { signOut } from "@/lib/logout"
 import { useState, useEffect, useRef, useCallback, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 
@@ -790,7 +791,7 @@ function EditorPageContent() {
   const handleLogout = async () => {
     try {
       // Clear server-side session cookie
-      await fetch("/api/auth/logout", { method: "POST" })
+      if (!await signOut()) return
       if (typeof window !== "undefined") {
         localStorage.removeItem("spotify_token")
         localStorage.removeItem("clio_auth")

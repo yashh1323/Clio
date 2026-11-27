@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createSupabaseAdmin } from "@/lib/supabase"
-import { verifyToken } from "@/lib/auth"
+import { verifySessionToken } from "@/lib/auth"
 
 // ── GET /api/teachers — returns all teacher profiles ──
 export async function GET(req: NextRequest) {
     // Any authenticated user can list teachers
     const token = req.cookies.get("clio_session")?.value
     if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    const session = verifyToken(token)
+    const session = await verifySessionToken(token)
     if (!session) return NextResponse.json({ error: "Invalid session" }, { status: 401 })
 
     const supabase = createSupabaseAdmin()

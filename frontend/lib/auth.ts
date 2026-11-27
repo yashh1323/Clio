@@ -1,34 +1,58 @@
 import crypto from "crypto"
 
-/**
- * Returns the AUTH_SECRET used for signing/verifying session tokens.
- *
- * - In production: throws if AUTH_SECRET env var is missing (never falls back).
- * - In development: uses a dev-only default so the app works out of the box.
- */
 export function getAuthSecret(): string {
     const secret = process.env.AUTH_SECRET
-
-    if (secret) return secret
-
-    if (process.env.NODE_ENV === "production") {
-        throw new Error(
-            "[Clio] AUTH_SECRET environment variable is required in production. " +
-            "Set it in your deployment config to a strong random string."
-        )
+    if (!secret || secret.trim().length < 32 || secret.startsWith("replace_with_")) {
+        throw new Error("Configure AUTH_SECRET with at least 32 random characters")
     }
-
-    // Dev-only fallback — never used in production
-    return "clio-dev-secret-DO-NOT-USE-IN-PROD"
+    return secret
 }
 
 export interface SessionTokenPayload {
     username: string
     role: string
+    sub?: string
+    session_version?: number
     exp?: number
     iat?: number
     jti?: string
     [key: string]: unknown
+}
+
+export interface ValidatedSession extends SessionTokenPayload {
+    sub: string
+    session_version: number
+    role: "student" | "teacher" | "admin"
+}
+
+/** API authorization is always checked against the live immutable account ID. */
+export async function verifySessionToken(token: string): Promise<ValidatedSession | null> {
+    try {
+        const payload = verifyToken(token)
+        if (!payload || typeof payload.sub !== "string" ||
+            !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload.sub) ||
+            !Number.isSafeInteger(payload.session_version) || (payload.session_version as number) < 0) {
+            return null // Legacy username-only sessions must sign in again.
+        }
+
+        // Keep signing/verifying pure and usable without initializing a database client.
+        const { createSupabaseAdmin } = await import("./supabase")
+        const { data: profile, error } = await createSupabaseAdmin()
+            .from("profiles")
+            .select("id, username, role, status, session_version")
+            .eq("id", payload.sub)
+            .single()
+
+        if (error || !profile || profile.id !== payload.sub || profile.status !== "active" ||
+            profile.session_version !== payload.session_version || profile.role !== payload.role ||
+            !["student", "teacher", "admin"].includes(profile.role) || typeof profile.username !== "string") {
+            return null
+        }
+        return { ...payload, sub: profile.id, username: profile.username,
+            role: profile.role, session_version: profile.session_version }
+    } catch {
+        return null // Missing configuration, unavailable DB, and deleted accounts fail closed.
+    }
 }
 
 export const SESSION_DURATION_SECONDS = 8 * 60 * 60 // 8 hours
@@ -64,6 +88,7 @@ export function signToken(
  */
 export function verifyToken(token: string): SessionTokenPayload | null {
     const secret = getAuthSecret()
+    if (typeof token !== "string" || token.length > 8192) return null
     const parts = token.split(".")
     if (parts.length !== 2) return null
 
@@ -97,7 +122,7 @@ export function verifyToken(token: string): SessionTokenPayload | null {
         ) {
             // Strictly check expiration claim
             const now = Math.floor(Date.now() / 1000)
-            if (typeof parsed.exp !== "number" || parsed.exp <= now) {
+            if (typeof parsed.exp !== "number" || !Number.isFinite(parsed.exp) || parsed.exp <= now) {
                 return null // Expired or missing exp claim fails closed
             }
 

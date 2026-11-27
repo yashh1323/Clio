@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createSupabaseAdmin } from "@/lib/supabase"
-import { verifyToken } from "@/lib/auth"
+import { verifySessionToken } from "@/lib/auth"
 import sanitizeHtml from "sanitize-html"
 
 // ── GET /api/profile — returns the current user's profile ──
 export async function GET(req: NextRequest) {
     const token = req.cookies.get("clio_session")?.value
     if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    const session = verifyToken(token)
+    const session = await verifySessionToken(token)
     if (!session) return NextResponse.json({ error: "Invalid session" }, { status: 401 })
 
     const supabase = createSupabaseAdmin()
@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
     const { data: profile, error } = await supabase
         .from("profiles")
         .select("id, username, role, email, full_name, class, course, created_at")
-        .eq("username", session.username)
+        .eq("id", session.sub)
         .single()
 
     if (error || !profile) {
@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
 export async function PUT(req: NextRequest) {
     const token = req.cookies.get("clio_session")?.value
     if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    const session = verifyToken(token)
+    const session = await verifySessionToken(token)
     if (!session) return NextResponse.json({ error: "Invalid session" }, { status: 401 })
 
     try {
@@ -92,7 +92,7 @@ export async function PUT(req: NextRequest) {
         const { data, error } = await supabase
             .from("profiles")
             .update(updateData)
-            .eq("username", session.username)
+            .eq("id", session.sub)
             .select("id, username, role, email, full_name, class, course")
             .single()
 

@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createSupabaseAdmin } from "@/lib/supabase"
-import { verifyToken } from "@/lib/auth"
+import { verifySessionToken } from "@/lib/auth"
 
 // ── GET /api/analytics — Teacher analytics aggregation ──
 // Returns: integrity distribution, submissions over time, assignment stats, grade distribution
 export async function GET(req: NextRequest) {
     const token = req.cookies.get("clio_session")?.value
     if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    const session = verifyToken(token)
+    const session = await verifySessionToken(token)
     if (!session || session.role !== "teacher") {
         return NextResponse.json({ error: "Forbidden: teachers only" }, { status: 403 })
     }
@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     const { data: profile, error: profileErr } = await supabase
         .from("profiles")
         .select("id")
-        .eq("username", session.username)
+        .eq("id", session.sub)
         .single()
 
     if (profileErr) return NextResponse.json({ error: profileErr.message }, { status: 500 })
@@ -28,7 +28,9 @@ export async function GET(req: NextRequest) {
         .from("submissions")
         .select(`
             id,
+            assignment_id,
             assignment_title,
+            assignment:assignments(title),
             integrity_score,
             wpm,
             paste_count,
@@ -75,21 +77,28 @@ export async function GET(req: NextRequest) {
         .map(([date, count]) => ({ date, count }))
 
     // ── 3. Per-assignment stats ──
-    const assignmentMap: Record<string, { count: number; totalScore: number; flagged: number; graded: number; totalGrade: number }> = {}
+    const assignmentMap = new Map<string, { title: string; count: number; totalScore: number; flagged: number; graded: number; totalGrade: number }>()
     subs.forEach(s => {
-        const key = s.assignment_title || "Untitled"
-        if (!assignmentMap[key]) assignmentMap[key] = { count: 0, totalScore: 0, flagged: 0, graded: 0, totalGrade: 0 }
-        assignmentMap[key].count++
-        assignmentMap[key].totalScore += s.integrity_score ?? 0
-        if ((s.integrity_score ?? 100) < 50) assignmentMap[key].flagged++
+        const assignment = Array.isArray(s.assignment) ? s.assignment[0] : s.assignment
+        const title = assignment?.title ?? (s.assignment_title || "Untitled")
+        const key = s.assignment_id ?? 'legacy:' + title
+        let stats = assignmentMap.get(key)
+        if (!stats) {
+            stats = { title, count: 0, totalScore: 0, flagged: 0, graded: 0, totalGrade: 0 }
+            assignmentMap.set(key, stats)
+        }
+        stats.count++
+        stats.totalScore += s.integrity_score ?? 0
+        if ((s.integrity_score ?? 100) < 50) stats.flagged++
         const grade = Array.isArray(s.grade) ? s.grade[0] : s.grade
         if (grade?.score !== undefined && grade?.score !== null) {
-            assignmentMap[key].graded++
-            assignmentMap[key].totalGrade += grade.score
+            stats.graded++
+            stats.totalGrade += grade.score
         }
     })
-    const assignmentStats = Object.entries(assignmentMap).map(([title, stats]) => ({
-        title,
+    const assignmentStats = Array.from(assignmentMap, ([key, stats]) => ({
+        key,
+        title: stats.title,
         submissions: stats.count,
         avgIntegrity: stats.count > 0 ? Math.round(stats.totalScore / stats.count) : 0,
         flagged: stats.flagged,

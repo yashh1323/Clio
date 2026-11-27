@@ -29,6 +29,7 @@ interface AnalyticsData {
     integrityDistribution: Array<{ range: string; count: number }>
     submissionsTimeline: Array<{ date: string; count: number }>
     assignmentStats: Array<{
+        key: string
         title: string
         submissions: number
         avgIntegrity: number
@@ -257,7 +258,7 @@ export default function AnalyticsPage() {
                                     </thead>
                                     <tbody>
                                         {data.assignmentStats.map((a) => (
-                                            <tr key={a.title} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+                                            <tr key={a.key} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
                                                 <td className="px-6 py-3 text-white font-medium truncate max-w-[200px]">{a.title}</td>
                                                 <td className="text-center px-4 py-3 text-white/60">{a.submissions}</td>
                                                 <td className="text-center px-4 py-3">

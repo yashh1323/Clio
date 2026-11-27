@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createSupabaseAdmin } from "@/lib/supabase"
 import bcrypt from "bcryptjs"
-import { verifyToken } from "@/lib/auth"
+import { verifySessionToken } from "@/lib/auth"
 import sanitizeHtml from "sanitize-html"
 
 const ALLOWED_ROLES = ["student", "teacher", "admin"]
@@ -12,7 +12,7 @@ async function requireAdmin(req: NextRequest) {
     if (!sessionToken) return null
 
     try {
-        const decoded = await verifyToken(sessionToken)
+        const decoded = await verifySessionToken(sessionToken)
         if (!decoded || decoded.role !== "admin") return null
         return decoded
     } catch {

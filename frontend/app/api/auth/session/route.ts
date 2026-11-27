@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { verifyToken } from "@/lib/auth"
+import { verifySessionToken } from "@/lib/auth"
 
 // ── GET /api/auth/session ──────────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
     if (!token) {
         return NextResponse.json({ authenticated: false }, { status: 401 })
     }
-    const payload = verifyToken(token)
+    const payload = await verifySessionToken(token)
     if (!payload) {
         return NextResponse.json({ authenticated: false }, { status: 401 })
     }

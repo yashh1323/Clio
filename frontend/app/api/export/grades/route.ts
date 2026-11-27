@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createSupabaseAdmin } from "@/lib/supabase"
-import { verifyToken } from "@/lib/auth"
+import { verifySessionToken } from "@/lib/auth"
 
 // ── GET /api/export/grades — Export all grades + submissions as CSV ──
 // Teachers only. Returns a downloadable CSV file.
 export async function GET(req: NextRequest) {
     const token = req.cookies.get("clio_session")?.value
     if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    const session = verifyToken(token)
+    const session = await verifySessionToken(token)
     if (!session || session.role !== "teacher") {
         return NextResponse.json({ error: "Forbidden: teachers only" }, { status: 403 })
     }
@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
     const { data: profile, error: profileErr } = await supabase
         .from("profiles")
         .select("id")
-        .eq("username", session.username)
+        .eq("id", session.sub)
         .single()
 
     if (profileErr) return NextResponse.json({ error: profileErr.message }, { status: 500 })

@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createSupabaseAdmin } from "@/lib/supabase"
-import { verifyToken } from "@/lib/auth"
+import { verifySessionToken } from "@/lib/auth"
 
 // ── GET /api/submissions/mine — returns the current student's own submissions ──
 export async function GET(req: NextRequest) {
     // Verify session (student only)
     const token = req.cookies.get("clio_session")?.value
     if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    const session = verifyToken(token)
+    const session = await verifySessionToken(token)
     if (!session) return NextResponse.json({ error: "Invalid session" }, { status: 401 })
     if (session.role !== "student") {
         return NextResponse.json({ error: "Forbidden: students only" }, { status: 403 })
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
     const { data: profile, error: profileErr } = await supabase
         .from("profiles")
         .select("id")
-        .eq("username", session.username)
+        .eq("id", session.sub)
         .single()
 
     if (profileErr || !profile) {

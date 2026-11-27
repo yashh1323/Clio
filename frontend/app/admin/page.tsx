@@ -1,5 +1,6 @@
 "use client"
 
+import { signOut } from "@/lib/logout"
 import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Plus, Trash2, Edit2, Shield, User, GraduationCap, Building2, FileText, FileCheck } from "lucide-react"
@@ -276,7 +277,7 @@ export default function AdminDashboard() {
                     <div className="flex items-center gap-4">
                         <button
                             onClick={() => {
-                                fetch("/api/auth/logout", { method: "POST" }).then(() => router.push("/login"))
+                                signOut().then(ok => { if (ok) router.push("/login") })
                             }}
                             className="text-sm text-zinc-400 hover:text-white transition-colors"
                         >

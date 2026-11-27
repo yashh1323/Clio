@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createSupabaseAdmin } from "@/lib/supabase"
-import { verifyToken } from "@/lib/auth"
+import { verifySessionToken } from "@/lib/auth"
 import { auditTelemetryWithEngine } from "@/lib/engine"
 import sanitizeHtml from "sanitize-html"
 
@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
     // Verify session (teacher only)
     const token = req.cookies.get("clio_session")?.value
     if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    const session = verifyToken(token)
+    const session = await verifySessionToken(token)
     
     // Explicitly check role without whitespace/case issues
     const role = session ? (session.role || "").trim().toLowerCase() : "";
@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
     const { data: teacherProfile } = await supabase
         .from("profiles")
         .select("id")
-        .eq("username", session.username)
+        .eq("id", session.sub)
         .single()
 
     if (!teacherProfile) {
@@ -160,7 +160,7 @@ export async function POST(req: NextRequest) {
     // Verify session (student only)
     const token = req.cookies.get("clio_session")?.value
     if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    const session = verifyToken(token)
+    const session = await verifySessionToken(token)
     if (!session) return NextResponse.json({ error: "Invalid session" }, { status: 401 })
     
     // Explicitly check role without whitespace/case issues
@@ -254,7 +254,7 @@ export async function POST(req: NextRequest) {
         const { data: profile, error: profileErr } = await supabase
             .from("profiles")
             .select("id")
-            .eq("username", session.username)
+            .eq("id", session.sub)
             .single()
 
         if (profileErr || !profile) {
@@ -282,7 +282,7 @@ export async function POST(req: NextRequest) {
 
             const { data: assignment, error: assignErr } = await supabase
                 .from("assignments")
-                .select("id, teacher_id")
+                .select("id, teacher_id, title")
                 .eq("id", assignment_id)
                 .single()
 
@@ -295,6 +295,7 @@ export async function POST(req: NextRequest) {
                 return NextResponse.json({ error: "teacher_id mismatch with assignment" }, { status: 400 })
             }
 
+            insertData.assignment_title = assignment.title
             insertData.assignment_id = assignment.id
             insertData.teacher_id = assignment.teacher_id
         } else if (teacher_id) {

@@ -92,8 +92,8 @@ const composePath = path.resolve(__dirname, '../docker-compose.yml');
 const composeYaml = fs.readFileSync(composePath, 'utf8');
 
 assert.ok(composeYaml.includes('127.0.0.1:8088:8088'), 'Engine port 8088 must be bound strictly to 127.0.0.1 loopback');
-assert.ok(composeYaml.includes('CLIO_ENGINE_KEY=${CLIO_ENGINE_KEY:-clio-engine-dev-secret-key-2026}'), 'Must specify default dev engine key');
-console.log('  ✔ docker-compose.yml binds engine to 127.0.0.1 and sets default engine key');
+assert.ok(composeYaml.includes('CLIO_ENGINE_KEY: ${CLIO_ENGINE_KEY:?'), 'Must require an explicit engine key');
+console.log('  ✔ docker-compose.yml binds engine to 127.0.0.1 and requires an explicit engine key');
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -110,15 +110,10 @@ console.log('  ✔ engine-rust source confirms startup security warning and poli
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Test 5: Local Environment Alignment (.env.local)
-// ─────────────────────────────────────────────────────────────────────────────
-console.log('\n--- Test 5: Local Environment Alignment (.env.local) ---');
-const envPath = path.resolve(__dirname, '.env.local');
-const envContent = fs.readFileSync(envPath, 'utf8');
-
-assert.ok(envContent.includes('CLIO_ENGINE_KEY=clio-engine-dev-secret-key-2026'), '.env.local must define CLIO_ENGINE_KEY');
-assert.ok(envContent.includes('TEACHER_INVITE_CODE=CLIO-FACULTY-2026'), '.env.local must define TEACHER_INVITE_CODE');
-console.log('  ✔ .env.local defines both CLIO_ENGINE_KEY and TEACHER_INVITE_CODE');
+// Test 5: Verify the distributable template without reading deployment secrets.
+const template = fs.readFileSync(path.resolve(__dirname, '.env.example'), 'utf8');
+assert.match(template, /^AUTH_SECRET=$/m);
+assert.match(template, /^CLIO_ENGINE_KEY=$/m);
 
 console.log('\n======================================================');
 console.log('🎉 ALL SECURITY REMEDIATION VERIFICATION TESTS PASSED!');

@@ -251,6 +251,9 @@ console.log('\n--- Test 5: Session Token Expiration & Claims ---');
 
 // 5.1 signToken generates exp, iat, and jti claims
 const validPayload = { username: 'student_alice', role: 'student' };
+delete process.env.AUTH_SECRET;
+assert.throws(() => signToken(validPayload), /Configure AUTH_SECRET/);
+process.env.AUTH_SECRET = crypto.randomBytes(32).toString("hex");
 const token = signToken(validPayload);
 assert(token.includes('.'), 'Token must be data.signature format');
 
@@ -281,7 +284,7 @@ console.log('  ✔ verifyToken strictly rejects expired token (fails closed)');
 
 // 5.4 verifyToken strictly rejects token with missing exp claim
 const noExpPayload = { username: 'attacker', role: 'admin' };
-const secret = 'clio-dev-secret-DO-NOT-USE-IN-PROD';
+const secret = process.env.AUTH_SECRET;
 const noExpData = Buffer.from(JSON.stringify(noExpPayload)).toString('base64url');
 const noExpSig = crypto.createHmac('sha256', secret).update(noExpData).digest('base64url');
 const tokenWithoutExp = `${noExpData}.${noExpSig}`;

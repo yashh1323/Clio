@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { signToken } from "@/lib/auth"
 import { createSupabaseAdmin } from "@/lib/supabase"
 import bcrypt from "bcryptjs"
+import { apiErrorResponse, readJsonBody, requireSameOrigin } from "../../_lib/request"
 
 // Pre-computed dummy bcrypt hash to ensure constant-time response even when username is not found,
 // preventing timing-based user enumeration attacks.
@@ -56,10 +57,12 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-        const body = await req.json()
+        requireSameOrigin(req)
+        const body = await readJsonBody(req, 16_384)
         const { username, password } = body as { username?: string; password?: string }
 
-        if (!username || !password) {
+        if (typeof username !== "string" || !username.trim() || username.length > 50 ||
+            typeof password !== "string" || !password) {
             return NextResponse.json({ error: "Username and password are required" }, { status: 400 })
         }
 
@@ -73,9 +76,9 @@ export async function POST(req: NextRequest) {
         // Secure Database authentication check via service role (bypasses anon RLS)
         const { data: user, error } = await supabaseAdmin
             .from('profiles')
-            .select('password, role')
-            .eq('username', username.toLowerCase())
-            .single()
+            .select('id, username, password, role, status, session_version')
+            .eq('username', normalizedUser)
+            .maybeSingle()
 
         // Always run bcrypt comparison to prevent user enumeration via timing discrepancies
         const hashToCompare = (user && typeof user.password === "string" && user.password.length > 0)
@@ -84,16 +87,21 @@ export async function POST(req: NextRequest) {
 
         const passwordMatch = await bcrypt.compare(password, hashToCompare)
 
-        if (error || !user || !user.password || !passwordMatch) {
+        if (error) {
+            console.error("[Login] Account lookup failed", error.code)
+            return NextResponse.json({ error: "Authentication service unavailable" }, { status: 503 })
+        }
+        if (!user || !user.password || !passwordMatch || user.status !== "active" ||
+            !["student", "teacher", "admin"].includes(user.role) || !Number.isSafeInteger(user.session_version)) {
             return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
         }
 
         // Build signed token using the shared auth module
-        const token = signToken({ username: username.toLowerCase(), role: user.role })
+        const token = signToken({ sub: user.id, username: user.username, role: user.role, session_version: user.session_version })
 
         // Set HttpOnly cookie
         const isProd = process.env.NODE_ENV === "production"
-        const res = NextResponse.json({ role: user.role, username: username.toLowerCase() })
+        const res = NextResponse.json({ id: user.id, account_id: user.id, role: user.role, username: user.username }, { headers: { "Cache-Control": "no-store" } })
         res.cookies.set("clio_session", token, {
             httpOnly: true,
             secure: isProd,
@@ -103,7 +111,7 @@ export async function POST(req: NextRequest) {
         })
 
         return res
-    } catch {
-        return NextResponse.json({ error: "Invalid request body" }, { status: 400 })
+    } catch (error) {
+        return apiErrorResponse(error)
     }
 }
